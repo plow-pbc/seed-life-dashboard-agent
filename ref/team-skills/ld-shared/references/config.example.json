@@ -1,0 +1,34 @@
+{
+  "family": {
+    "owner": { "name": "[OWNER_NAME]", "imessage": "[OWNER_IMESSAGE]" },
+    "partner": { "name": "[PARTNER_NAME]", "imessage": "[PARTNER_IMESSAGE]" },
+    "people": ["[FAMILY_PERSON_1]", "[FAMILY_PERSON_2]"],
+    "timezone": "America/Los_Angeles"
+  },
+  "calendar": {
+    "sources": [
+      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "primary", "name": "Personal" },
+      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "[FAMILY_CALENDAR_ID]", "name": "Family shared" },
+      { "account": "[CALENDAR_ACCOUNT_2]", "calendar_id": "primary", "name": "Work" },
+      { "account": "[PARTNER_CALENDAR_ACCOUNT]", "calendar_id": "primary", "name": "Partner", "self": false }
+    ]
+  },
+  "morning_updates": {
+    "review_window_hours": 24
+  },
+  "weekly_digest": {
+    "length": "",
+    "long_lead": [{ "type": "[LONG_LEAD_TYPE]", "lead_days": 7 }]
+  },
+  "morning_triage": {
+    "ranking_instructions": "",
+    "exclude": {
+      "imessage_handles": [],
+      "email_addresses": []
+    }
+  },
+  "calendar_nudge": {
+    "lookahead_virtual_minutes": 30,
+    "lookahead_in_person_minutes": 60
+  }
+}
