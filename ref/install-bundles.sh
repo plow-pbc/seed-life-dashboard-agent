@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 #
 # seed-life-dashboard-agent — POST the vendored ld-* bundles to local
-# plowd's install endpoint; land the relay's endpoint+token in the
-# agent-runtime secrets dir so the bundles can post cards.
+# plowd's install endpoint; land the relay's endpoint+token + the
+# household ld-config in the agent-runtime dir so the bundles can run.
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
-# with-rollback) and rewrites the two secret files.
+# with-rollback over the SINGLE multi-bundle transaction) and rewrites
+# the two secret files. The ld-config is copied from the vendored
+# example ONLY on first install; subsequent runs preserve operator
+# edits.
+#
+# Relay-state validation + ld-config write happen BEFORE the bundle
+# POST so that no scheduled code is activated until the runtime
+# config + credentials it depends on are known-good.
 
 set -euo pipefail
 
@@ -14,6 +21,8 @@ APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
 LOCAL_TOKEN="$APP_SUPPORT/agent-runtime/secrets/plow-local-token"
 RELAY_STATE="$HOME/Library/Application Support/seed-life-dashboard-relay/state.json"
 SECRETS_DIR="$APP_SUPPORT/agent-runtime/secrets"
+LD_CONFIG_DIR="$APP_SUPPORT/agent-runtime/runtime/ld"
+LD_CONFIG="$LD_CONFIG_DIR/config.json"
 
 # 1. Required state.
 [ -f "$LOCAL_TOKEN" ] || {
@@ -35,6 +44,12 @@ for tool in jq tar lsof pgrep python3 awk; do
     || { echo "missing required tool: $tool" >&2; exit 1; }
 done
 
+SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
+[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
+LD_CONFIG_EXAMPLE="$BUNDLES_DIR/ld-shared/references/config.example.json"
+[ -f "$LD_CONFIG_EXAMPLE" ] || { echo "no ld-config example at $LD_CONFIG_EXAMPLE" >&2; exit 1; }
+
 # 3. Discover plowd's HTTP API port. Same pattern as plow4/justfile.
 if [ -s "$APP_SUPPORT/dev-plowd-port" ]; then
   PLOWD_PORT=$(cat "$APP_SUPPORT/dev-plowd-port")
@@ -54,24 +69,85 @@ else
 fi
 PLOWD_URL="http://127.0.0.1:$PLOWD_PORT/marketplace/api/install-local-bundles"
 
-# 4. POST each bundle. Token + body via Python stdlib so neither lands
-#    in argv (same shape as plow4/justfile's sync-team-skills).
-SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
-BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
-[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
+# 4. Validate + extract relay state UPFRONT so a malformed/missing
+#    field aborts the install before plowd is mutated. Both must be
+#    non-empty strings; endpoint_url must be HTTPS.
+ENDPOINT_URL=$(jq -re .endpoint_url "$RELAY_STATE") \
+  || { echo "$RELAY_STATE: .endpoint_url missing/empty" >&2; exit 1; }
+DASHBOARD_TOKEN=$(jq -re .dashboard_token "$RELAY_STATE") \
+  || { echo "$RELAY_STATE: .dashboard_token missing/empty" >&2; exit 1; }
+case "$ENDPOINT_URL" in
+  https://*) ;;
+  *) echo "$RELAY_STATE: endpoint_url is not HTTPS: $ENDPOINT_URL" >&2; exit 1 ;;
+esac
 
-cd "$BUNDLES_DIR"
-for bundle in ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest; do
-  [ -d "$bundle" ] || {
+# 5. Land dashboard secrets BEFORE bundle install — every ld-* bundle's
+#    runtime reads /config/secrets/dashboard-* on first invocation, so
+#    a bundle-install before secrets land would activate scheduled code
+#    against unknown credentials. Atomic write at mode 600 via mktemp
+#    + rename, inside SECRETS_DIR for same-fs atomicity.
+mkdir -p "$SECRETS_DIR"
+for field in endpoint_url:dashboard-endpoint-url dashboard_token:dashboard-token; do
+  jq_key="${field%%:*}"
+  out_name="${field##*:}"
+  TMP=$(mktemp "$SECRETS_DIR/.${out_name}.XXXXXX")
+  jq -re ".${jq_key}" "$RELAY_STATE" > "$TMP"
+  chmod 600 "$TMP"
+  mv "$TMP" "$SECRETS_DIR/$out_name"
+done
+
+# 6. Land ld-config from the vendored example ONLY if not already
+#    present — never overwrite operator edits. The example contains
+#    placeholder values the operator must replace; verify checks that
+#    the file exists, but trusting the operator to fill it (rather
+#    than the SEED inventing household state) is per the SEED-
+#    convention's "MUST NOT invent secrets" rule.
+mkdir -p "$LD_CONFIG_DIR"
+if [ ! -f "$LD_CONFIG" ]; then
+  cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
+  chmod 600 "$LD_CONFIG"
+  echo "" >&2
+  echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
+  echo "The file has PLACEHOLDER values for family/timezone/calendar" >&2
+  echo "accounts. The bundles will not function correctly until you" >&2
+  echo "edit it with your household's real values." >&2
+else
+  echo "ld-config already present at $LD_CONFIG — preserving operator edits." >&2
+fi
+
+# 7. POST ALL bundles in a single tarball + single Python call so
+#    plowd's marketplace endpoint sees one transaction (atomic
+#    rollback boundary). Matches plow4/justfile sync-team-skills shape.
+#    Token + body via Python stdlib so neither lands in argv. The
+#    no-redirect opener prevents plowd from forwarding Authorization
+#    to another target on an upstream 30x — same pattern as
+#    ld-shared/scripts/post_to_kiosk.py:_NoRedirect.
+BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest)
+for bundle in "${BUNDLE_NAMES[@]}"; do
+  [ -d "$BUNDLES_DIR/$bundle" ] || {
     echo "missing vendored bundle: $bundle" >&2
     exit 1
   }
-  TARBALL=$(mktemp -t "agent-$bundle")
-  tar czf "$TARBALL" "$bundle"
-  TOKEN_PATH="$LOCAL_TOKEN" PLOWD_URL="$PLOWD_URL" TARBALL="$TARBALL" python3 - <<'PY'
+done
+TARBALL=$(mktemp -t agent-bundles)
+trap 'rm -f "$TARBALL"' EXIT
+( cd "$BUNDLES_DIR" && tar czf "$TARBALL" "${BUNDLE_NAMES[@]}" )
+TOKEN_PATH="$LOCAL_TOKEN" PLOWD_URL="$PLOWD_URL" TARBALL="$TARBALL" python3 - <<'PY'
 import json, os, sys, urllib.error, urllib.request
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """plowd is local; an upstream 30x means something is wrong. Do
+    NOT forward the Authorization header to another target."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"unexpected redirect to {newurl} — refusing to forward Authorization",
+            headers, fp,
+        )
+
 token = open(os.environ["TOKEN_PATH"]).read().strip()
 body = open(os.environ["TARBALL"], "rb").read()
+opener = urllib.request.build_opener(_NoRedirect())
 req = urllib.request.Request(
     os.environ["PLOWD_URL"],
     data=body,
@@ -79,31 +155,28 @@ req = urllib.request.Request(
     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/gzip"},
 )
 try:
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with opener.open(req, timeout=60) as resp:
         print(json.dumps(json.load(resp), indent=2))
 except urllib.error.HTTPError as exc:
     sys.exit(f"install-local-bundles failed (HTTP {exc.code}): {exc.read().decode(errors='replace')[:500]}")
 except (urllib.error.URLError, TimeoutError) as exc:
     sys.exit(f"install-local-bundles failed (network/timeout): {exc}")
 PY
-  rm -f "$TARBALL"
-  echo "installed: $bundle" >&2
-done
-
-# 5. Land the relay's endpoint+token into agent-runtime/secrets. Atomic
-#    write at mode 600. The values pass through jq → file; no echo, no
-#    argv.
-mkdir -p "$SECRETS_DIR"
-for field in endpoint_url:dashboard-endpoint-url dashboard_token:dashboard-token; do
-  jq_key="${field%%:*}"
-  out_name="${field##*:}"
-  TMP=$(mktemp -t "agent-secret")
-  jq -re ".${jq_key}" "$RELAY_STATE" > "$TMP"
-  chmod 600 "$TMP"
-  mv "$TMP" "$SECRETS_DIR/$out_name"
-done
+rm -f "$TARBALL"
+trap - EXIT
 
 echo "" >&2
 echo "Agent installed:" >&2
-echo "  5 bundles posted to plowd at $PLOWD_URL" >&2
+echo "  5 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
+echo "             ld-morning-updates, ld-weekly-digest) posted in one" >&2
+echo "             transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
+echo "  ld-config at $LD_CONFIG (edit for your household)" >&2
+echo "" >&2
+echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
+echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
+echo "'cron action=add' verb after install — message your Plow agent to" >&2
+echo "set up the morning-updates / morning-triage / weekly-digest crons" >&2
+echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge uses" >&2
+echo "plowd's auto-activated scheduled/ entrypoint and needs no manual" >&2
+echo "setup." >&2

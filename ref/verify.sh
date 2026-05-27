@@ -7,6 +7,7 @@ PLOW_BUNDLE_ID="${PLOW_BUNDLE_ID:-co.plow.app}"
 APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
 SECRETS_DIR="$APP_SUPPORT/agent-runtime/secrets"
 CONTAINERS_DIR="$APP_SUPPORT/containers"
+LD_CONFIG="$APP_SUPPORT/agent-runtime/runtime/ld/config.json"
 
 # v1: dashboard-endpoint-url and dashboard-token present, mode 600, non-empty.
 for s in dashboard-endpoint-url dashboard-token; do
@@ -16,6 +17,14 @@ for s in dashboard-endpoint-url dashboard-token; do
     || { echo "FAIL ^v-secrets: $f not mode 600" >&2; exit 1; }
 done
 echo "OK   ^v-secrets"
+
+# v1b: ld-config present + parses as JSON. We can't assert "operator
+# edited the placeholders" without knowing what valid household data
+# looks like (that's the operator's call); presence + JSON-parse is
+# the floor.
+[ -f "$LD_CONFIG" ] || { echo "FAIL ^v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
+jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL ^v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
+echo "OK   ^v-ld-config"
 
 # v2: each bundle present in the main agent's container workspace.
 #     "Main agent" container resolution: containers/index.json names
