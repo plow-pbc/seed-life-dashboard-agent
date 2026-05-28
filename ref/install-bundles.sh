@@ -201,7 +201,7 @@ echo "  5 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
 echo "             ld-morning-updates, ld-weekly-digest) posted in one" >&2
 echo "             transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
-echo "  ld-config at $LD_CONFIG (edit for your household)" >&2
+echo "  ld-config resolved at $LD_CONFIG" >&2
 echo "" >&2
 echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
 echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
