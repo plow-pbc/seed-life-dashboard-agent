@@ -110,13 +110,13 @@ test("only other attendee declined → dropped (no one to meet with)", () => {
 });
 
 test("owner's SECOND identity (cross-account invite) qualifies", () => {
-  // Owner fetched this via their sam@odio.dev account but is invited as
-  // so@plow.co; both are in the identity set.
-  const ids = new Set(["sam@odio.dev", "so@plow.co"]);
+  // Owner fetched this via their owner.personal@example.com account but is invited as
+  // owner.work@example.com; both are in the identity set.
+  const ids = new Set(["owner.personal@example.com", "owner.work@example.com"]);
   const evt = baseEvent({
     organizer: { email: OTHER },
     attendees: [
-      { email: "so@plow.co", response_status: "accepted" },
+      { email: "owner.work@example.com", response_status: "accepted" },
       { email: OTHER, response_status: "accepted" },
     ],
   });

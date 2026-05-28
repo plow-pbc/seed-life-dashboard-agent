@@ -71,11 +71,14 @@ PLOWD_URL="http://127.0.0.1:$PLOWD_PORT/marketplace/api/install-local-bundles"
 
 # 4. Validate + extract relay state UPFRONT so a malformed/missing
 #    field aborts the install before plowd is mutated. Both must be
-#    non-empty strings; endpoint_url must be HTTPS.
-ENDPOINT_URL=$(jq -re .endpoint_url "$RELAY_STATE") \
-  || { echo "$RELAY_STATE: .endpoint_url missing/empty" >&2; exit 1; }
-DASHBOARD_TOKEN=$(jq -re .dashboard_token "$RELAY_STATE") \
-  || { echo "$RELAY_STATE: .dashboard_token missing/empty" >&2; exit 1; }
+#    non-empty (whitespace-only fails too); endpoint_url must be
+#    HTTPS. `jq -re` rejects null/missing; the explicit `test("\\S")`
+#    rejects empty-string and whitespace-only values that the seed's
+#    "validate non-empty before mutation" contract requires.
+ENDPOINT_URL=$(jq -re '.endpoint_url | strings | select(test("\\S"))' "$RELAY_STATE") \
+  || { echo "$RELAY_STATE: .endpoint_url missing/empty/whitespace" >&2; exit 1; }
+DASHBOARD_TOKEN=$(jq -re '.dashboard_token | strings | select(test("\\S"))' "$RELAY_STATE") \
+  || { echo "$RELAY_STATE: .dashboard_token missing/empty/whitespace" >&2; exit 1; }
 case "$ENDPOINT_URL" in
   https://*) ;;
   *) echo "$RELAY_STATE: endpoint_url is not HTTPS: $ENDPOINT_URL" >&2; exit 1 ;;
@@ -86,15 +89,23 @@ esac
 #    a bundle-install before secrets land would activate scheduled code
 #    against unknown credentials. Atomic write at mode 600 via mktemp
 #    + rename, inside SECRETS_DIR for same-fs atomicity.
+#
+# Per seed-life-dashboard-relay's `^obj-state` contract, state.json's
+# `endpoint_url` is the Vercel deployment BASE URL only — this SEED is
+# responsible for appending `/api/message` so the runtime
+# `dashboard-endpoint-url` is the full URL `post_to_kiosk.py` POSTs to.
+# Use already-validated $ENDPOINT_URL / $DASHBOARD_TOKEN from step 4
+# (not a re-jq) so the values that hit the secret files are the same
+# ones the validation passed.
 mkdir -p "$SECRETS_DIR"
-for field in endpoint_url:dashboard-endpoint-url dashboard_token:dashboard-token; do
-  jq_key="${field%%:*}"
-  out_name="${field##*:}"
-  TMP=$(mktemp "$SECRETS_DIR/.${out_name}.XXXXXX")
-  jq -re ".${jq_key}" "$RELAY_STATE" > "$TMP"
-  chmod 600 "$TMP"
-  mv "$TMP" "$SECRETS_DIR/$out_name"
-done
+TMP=$(mktemp "$SECRETS_DIR/.dashboard-endpoint-url.XXXXXX")
+printf '%s/api/message' "${ENDPOINT_URL%/}" > "$TMP"
+chmod 600 "$TMP"
+mv "$TMP" "$SECRETS_DIR/dashboard-endpoint-url"
+TMP=$(mktemp "$SECRETS_DIR/.dashboard-token.XXXXXX")
+printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
+chmod 600 "$TMP"
+mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
 # 6. Land ld-config from the vendored example ONLY if not already
 #    present — never overwrite operator edits. The example contains

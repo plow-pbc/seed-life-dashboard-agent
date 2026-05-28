@@ -18,12 +18,19 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   ^v-secrets"
 
-# v1b: ld-config present + parses as JSON. We can't assert "operator
-# edited the placeholders" without knowing what valid household data
-# looks like (that's the operator's call); presence + JSON-parse is
-# the floor.
+# v1b: ld-config present + parses as JSON + no remaining placeholders.
+# Presence + JSON-parse is the floor; the placeholder check (any
+# string value matching the `[OWNER_*]` / `[FAMILY_*]` / `[YOUR_*]`
+# pattern the example ships with) catches the silent partial-install
+# class where a fresh `cp config.example.json -> config.json` leaves
+# the bundles wired against fictional household data.
 [ -f "$LD_CONFIG" ] || { echo "FAIL ^v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL ^v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
+PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[(OWNER|FAMILY|YOUR|TIMEZONE|CALENDAR)_[A-Z_]+\\]"))] | length' "$LD_CONFIG")
+if [ "$PLACEHOLDERS" != "0" ]; then
+  echo "FAIL ^v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) (e.g. [OWNER_NAME], [FAMILY_TIMEZONE], etc.) — edit the file with your household's real values before the bundles can function." >&2
+  exit 1
+fi
 echo "OK   ^v-ld-config"
 
 # v2: each bundle present in the main agent's container workspace.

@@ -175,8 +175,8 @@ Then keep an event only if **all** hold:
   This handles the household-calendars / mirrored-invite case
   (the event lands on a shared calendar with one of the owner's
   emails in attendees) and the cross-account case (e.g. the
-  owner is invited as `so@plow.co` on a meeting their
-  `sam@odio.dev` token fetched via that account's family-share).
+  owner is invited as `owner.work@example.com` on a meeting their
+  `owner.personal@example.com` token fetched via that account's family-share).
   A declined identity still does not nudge.
 - It has at least one *human* counterparty who has not declined:
 

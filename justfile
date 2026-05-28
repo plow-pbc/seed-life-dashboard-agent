@@ -13,8 +13,14 @@
 # graph member that does.
 
 test:
+    # bash-parse checks first — fail fast on syntax errors.
     bash -n ref/install-bundles.sh
     bash -n ref/verify.sh
-    bash ~/Hacking/seed/ref/verify.sh "$PWD"
+    # Vendored bundle tests — the actual value this justfile provides
+    # over the other SEEDs in the graph (which carry no executable
+    # source). Seed-convention structural verification is a separate
+    # repo-external concern (run via the bot's seed-conformance gate);
+    # `just test` deliberately doesn't reference operator-specific
+    # paths like `~/Hacking/seed/...` so it runs cleanly in any CI.
     python3 ref/team-skills/ld-shared/scripts/test_post_to_kiosk.py
     cd ref/team-skills/ld-calendar-nudge/scheduled && node --test *.test.js
