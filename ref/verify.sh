@@ -26,9 +26,14 @@ echo "OK   ^v-secrets"
 # the bundles wired against fictional household data.
 [ -f "$LD_CONFIG" ] || { echo "FAIL ^v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL ^v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[(OWNER|FAMILY|YOUR|TIMEZONE|CALENDAR)_[A-Z_]+\\]"))] | length' "$LD_CONFIG")
+# Generic `[UPPER_SNAKE]` placeholder detector — matches the same
+# pattern install-bundles.sh's pre-mutation gate uses. Catches
+# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
+# [FAMILY_TIMEZONE], [YOUR_*], etc. — anything that survives the
+# bot-flagged "specific-token list" shape.
+PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
 if [ "$PLACEHOLDERS" != "0" ]; then
-  echo "FAIL ^v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) (e.g. [OWNER_NAME], [FAMILY_TIMEZONE], etc.) — edit the file with your household's real values before the bundles can function." >&2
+  echo "FAIL ^v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) — edit the file with your household's real values and re-run the install before verifying." >&2
   exit 1
 fi
 echo "OK   ^v-ld-config"

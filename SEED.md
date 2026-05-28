@@ -67,12 +67,13 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ### ld-config is landed ^act-land-ld-config
 
 - The install action MUST copy `ref/team-skills/ld-shared/references/config.example.json` to `<app_support>/agent-runtime/runtime/ld/config.json` at mode 600 on first install ONLY. Re-runs MUST NOT overwrite the file — the operator's edits are the canonical state.
-- The example ships with placeholder values for family/timezone/calendar accounts; the SEED MUST surface a loud message to the operator that the file needs editing before the bundles function correctly.
+- After landing (or detecting an existing) `ld-config`, the install action MUST scan the file for any `[UPPER_SNAKE]` placeholder (regex `\\[[A-Z][A-Z0-9_]*\\]` matched against all string values via `jq` recursive descent). If ANY placeholder remains, the install action MUST exit 0 with a loud "edit ld-config and re-run" message BEFORE the bundle POST — activating scheduled bundles against placeholder data would land code that fails at the first scheduled tick. `^v-ld-config` cross-checks the same gate at verify time.
+- Single source of truth for "installed": `ld-config` has no `[UPPER_SNAKE]` placeholders. Install, verify, and the operator instructions all agree on this definition.
 
 ## Verify
 
 1. **Dashboard secrets present.** ^v-secrets Do `<app_support>/agent-runtime/secrets/dashboard-endpoint-url` and `dashboard-token` exist with mode `600` and non-zero size? Expected: yes.
-2. **ld-config present + well-formed.** ^v-ld-config Does `<app_support>/agent-runtime/runtime/ld/config.json` exist and parse as JSON? Expected: yes. (We do NOT assert "operator filled in real values" — that's outside the SEED's contract; the bundles will fail loudly on placeholder data when their first scheduled invocation reads the file.)
+2. **ld-config present, well-formed, and fully resolved.** ^v-ld-config Does `<app_support>/agent-runtime/runtime/ld/config.json` exist, parse as JSON, AND contain NO `[UPPER_SNAKE]` placeholder values (matched by `\\[[A-Z][A-Z0-9_]*\\]` over the JSON's string values, recursive)? Expected: yes — placeholders are the SEED's single source of truth for "install not yet complete." `^act-land-ld-config` enforces the same gate at install time (refuses to POST bundles while placeholders remain); this verify step is the cross-check that the gate held.
 3. **Bundles installed.** ^v-bundles Do all five `SKILL.md` files (or, for `ld-shared`, the `scripts/post_to_kiosk.py` file) exist inside the main agent container's bind-mounted workspace at `<app_support>/containers/<container-UUID>/workspace/skills/ld-*`? Expected: yes.
 4. **Endpoint+token are syntactically usable.** ^v-dry-run Does one of the vendored `post_*.py` wrappers invoked with `--dry-run` produce a redacted-body output line (proving the secrets resolve and the wrapper executes)? Expected: yes.
 

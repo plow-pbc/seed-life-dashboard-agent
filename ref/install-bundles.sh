@@ -109,21 +109,40 @@ mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
 # 6. Land ld-config from the vendored example ONLY if not already
 #    present — never overwrite operator edits. The example contains
-#    placeholder values the operator must replace; verify checks that
-#    the file exists, but trusting the operator to fill it (rather
-#    than the SEED inventing household state) is per the SEED-
-#    convention's "MUST NOT invent secrets" rule.
+#    `[UPPER_SNAKE]` placeholders the operator must replace; the SEED
+#    convention forbids the install from inventing household values.
+#
+# Contract: placeholder config means "install not yet complete." If
+# placeholders are still present (either because we just copied the
+# example, or because the operator's prior pass exited without
+# editing), this install does NOT POST bundles — it surfaces the
+# next step and exits 0 (re-run after editing). Activating scheduled
+# code against `[OWNER_NAME]` / `[FAMILY_TIMEZONE]` / `[CALENDAR_*]`
+# placeholders would land bundles that fail at the first scheduled
+# tick — that's the silent-partial-install class this gate
+# eliminates, and it keeps install / verify / SEED.md aligned on a
+# single definition of "installed."
 mkdir -p "$LD_CONFIG_DIR"
 if [ ! -f "$LD_CONFIG" ]; then
   cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
   chmod 600 "$LD_CONFIG"
   echo "" >&2
   echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
-  echo "The file has PLACEHOLDER values for family/timezone/calendar" >&2
-  echo "accounts. The bundles will not function correctly until you" >&2
-  echo "edit it with your household's real values." >&2
-else
-  echo "ld-config already present at $LD_CONFIG — preserving operator edits." >&2
+fi
+
+# Generic placeholder detector — any `[UPPER_SNAKE]` string anywhere
+# in the JSON (recursive descent via jq `..`). Specific tokens like
+# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
+# [FAMILY_TIMEZONE], [YOUR_*] all match this one rule.
+PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
+if [ "$PLACEHOLDERS" != "0" ]; then
+  echo "" >&2
+  echo "ld-config at $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s)." >&2
+  echo "Edit the file with your household's real values (family names," >&2
+  echo "timezone, calendar account IDs, etc.), then re-run this install." >&2
+  echo "The bundle install is GATED on a fully-resolved config — the" >&2
+  echo "bundles would fail at their first scheduled tick otherwise." >&2
+  exit 0
 fi
 
 # 7. POST ALL bundles in a single tarball + single Python call so
