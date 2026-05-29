@@ -11,11 +11,11 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 API / per-machine state:
 
 - A Mac running macOS with `Plow.app` installed AND activated. Authored on macOS 26.4.1 / arm64. plowd MUST be running (the install POSTs to its local HTTP API).
-- A deployed life-dashboard relay (see `seed-life-dashboard-relay`'s _State file_ object). This SEED reads the relay's state file to wire the bundles to the right endpoint+token.
+- A deployed life-dashboard relay (see `seed-life-dashboard-relay`'s [state file](https://github.com/plow-pbc/seed-life-dashboard-relay/blob/main/SEED.md#state-file)). This SEED reads the relay's state file to wire the bundles to the right endpoint+token.
 
 Software:
 
-- `https://github.com/plow-pbc/seed-plow-app` — installs Plow.app and activates it. Provides the _activated_ verify check (the `plow-api-token` post-condition); also lands the `plow-local-token` this SEED uses to authenticate to plowd's marketplace endpoint.
+- `https://github.com/plow-pbc/seed-plow-app` — installs Plow.app and activates it. Provides its [activation verify check](https://github.com/plow-pbc/seed-plow-app/blob/main/SEED.md#verify) (the `plow-api-token` post-condition); also lands the `plow-local-token` this SEED uses to authenticate to plowd's marketplace endpoint.
 - `https://github.com/plow-pbc/seed-life-dashboard-relay` — deploys the Vercel relay and writes the state file consumed below.
 - System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`. No install needed.
 
@@ -41,7 +41,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### Relay state
 
-- Read-only consumed: `~/Library/Application Support/seed-life-dashboard-relay/state.json` ([`seed-life-dashboard-relay`](https://github.com/plow-pbc/seed-life-dashboard-relay)'s _State file_ object). This SEED does NOT write to it; only reads `endpoint_url` and `dashboard_token` and projects them into the [dashboard secrets](#dashboard-secrets).
+- Read-only consumed: `~/Library/Application Support/seed-life-dashboard-relay/state.json` ([`seed-life-dashboard-relay`](https://github.com/plow-pbc/seed-life-dashboard-relay)'s [state file](https://github.com/plow-pbc/seed-life-dashboard-relay/blob/main/SEED.md#state-file)). This SEED does NOT write to it; only reads `endpoint_url` and `dashboard_token` and projects them into the [dashboard secrets](#dashboard-secrets).
 
 ### ld-config
 
@@ -67,7 +67,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ### ld-config is landed
 
 - The install action MUST copy `ref/team-skills/ld-shared/references/config.example.json` to `<app_support>/agent-runtime/runtime/ld/config.json` at mode 600 on first install ONLY. Re-runs MUST NOT overwrite the file — the operator's edits are the canonical state.
-- After landing (or detecting an existing) `ld-config`, the install action MUST scan the file for any `[UPPER_SNAKE]` placeholder (regex `\\[[A-Z][A-Z0-9_]*\\]` matched against all string values via `jq` recursive descent). If ANY placeholder remains, the install action MUST exit 0 with a loud "edit ld-config and re-run" message BEFORE the bundle POST — activating scheduled bundles against placeholder data would land code that fails at the first scheduled tick. The `ld-config` verify check cross-checks the same gate at verify time.
+- After landing (or detecting an existing) `ld-config`, the install action MUST scan the file for any `[UPPER_SNAKE]` placeholder (regex `\\[[A-Z][A-Z0-9_]*\\]` matched against all string values via `jq` recursive descent). If ANY placeholder remains, the install action MUST exit 0 with a loud "edit ld-config and re-run" message BEFORE the bundle POST — activating scheduled bundles against placeholder data would land code that fails at the first scheduled tick. The [`ld-config` verify check](#verify) cross-checks the same gate at verify time.
 - Single source of truth for "installed": `ld-config` has no `[UPPER_SNAKE]` placeholders. Install, verify, and the operator instructions all agree on this definition.
 
 ## Verify
