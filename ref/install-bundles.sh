@@ -90,7 +90,7 @@ esac
 #    against unknown credentials. Atomic write at mode 600 via mktemp
 #    + rename, inside SECRETS_DIR for same-fs atomicity.
 #
-# Per seed-life-dashboard-relay's `^obj-state` contract, state.json's
+# Per seed-life-dashboard-relay's SEED.md#state-file contract, state.json's
 # `endpoint_url` is the Vercel deployment BASE URL only — this SEED is
 # responsible for appending `/api/message` so the runtime
 # `dashboard-endpoint-url` is the full URL `post_to_kiosk.py` POSTs to.
