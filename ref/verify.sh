@@ -12,11 +12,11 @@ LD_CONFIG="$APP_SUPPORT/agent-runtime/runtime/ld/config.json"
 # v1: dashboard-endpoint-url and dashboard-token present, mode 600, non-empty.
 for s in dashboard-endpoint-url dashboard-token; do
   f="$SECRETS_DIR/$s"
-  [ -s "$f" ] || { echo "FAIL ^v-secrets: $f missing or empty" >&2; exit 1; }
+  [ -s "$f" ] || { echo "FAIL v-secrets: $f missing or empty" >&2; exit 1; }
   [ "$(stat -f '%Lp' "$f")" = "600" ] \
-    || { echo "FAIL ^v-secrets: $f not mode 600" >&2; exit 1; }
+    || { echo "FAIL v-secrets: $f not mode 600" >&2; exit 1; }
 done
-echo "OK   ^v-secrets"
+echo "OK   v-secrets"
 
 # v1b: ld-config present + parses as JSON + no remaining placeholders.
 # Presence + JSON-parse is the floor; the placeholder check (any
@@ -24,8 +24,8 @@ echo "OK   ^v-secrets"
 # pattern the example ships with) catches the silent partial-install
 # class where a fresh `cp config.example.json -> config.json` leaves
 # the bundles wired against fictional household data.
-[ -f "$LD_CONFIG" ] || { echo "FAIL ^v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
-jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL ^v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
+[ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
+jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
 # Generic `[UPPER_SNAKE]` placeholder detector — matches the same
 # pattern install-bundles.sh's pre-mutation gate uses. Catches
 # [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
@@ -33,10 +33,10 @@ jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL ^v-ld-config: $LD_CONFIG is not 
 # bot-flagged "specific-token list" shape.
 PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
 if [ "$PLACEHOLDERS" != "0" ]; then
-  echo "FAIL ^v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) — edit the file with your household's real values and re-run the install before verifying." >&2
+  echo "FAIL v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) — edit the file with your household's real values and re-run the install before verifying." >&2
   exit 1
 fi
-echo "OK   ^v-ld-config"
+echo "OK   v-ld-config"
 
 # v2: each bundle present in the main agent's container workspace.
 #     "Main agent" container resolution: containers/index.json names
@@ -48,7 +48,7 @@ else
                    | grep -E '^[0-9a-f-]{36}$' \
                    | head -1)
 fi
-[ -n "$CONTAINER_UUID" ] || { echo "FAIL ^v-bundles: no main agent container under $CONTAINERS_DIR" >&2; exit 1; }
+[ -n "$CONTAINER_UUID" ] || { echo "FAIL v-bundles: no main agent container under $CONTAINERS_DIR" >&2; exit 1; }
 WORKSPACE_SKILLS="$CONTAINERS_DIR/$CONTAINER_UUID/workspace/skills"
 
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
@@ -62,9 +62,9 @@ declare -a probes=(
 )
 for p in "${probes[@]}"; do
   [ -f "$WORKSPACE_SKILLS/$p" ] \
-    || { echo "FAIL ^v-bundles: $WORKSPACE_SKILLS/$p missing" >&2; exit 1; }
+    || { echo "FAIL v-bundles: $WORKSPACE_SKILLS/$p missing" >&2; exit 1; }
 done
-echo "OK   ^v-bundles ($CONTAINER_UUID)"
+echo "OK   v-bundles ($CONTAINER_UUID)"
 
 # v3: dry-run a wrapper. We use the host-side vendored copy here — same
 # wrapper code that's installed inside the VM, just executed from the
@@ -101,8 +101,8 @@ except SystemExit as e:
 PY
 rm -f "$DRY_INPUT"
 grep -qE '<redacted, [0-9]+ chars>' /tmp/agent-verify-out \
-  || { echo "FAIL ^v-dry-run: no redacted-body output line in /tmp/agent-verify-out" >&2; head -20 /tmp/agent-verify-out >&2; exit 1; }
+  || { echo "FAIL v-dry-run: no redacted-body output line in /tmp/agent-verify-out" >&2; head -20 /tmp/agent-verify-out >&2; exit 1; }
 rm -f /tmp/agent-verify-out
-echo "OK   ^v-dry-run"
+echo "OK   v-dry-run"
 
 echo "tree conforms"
