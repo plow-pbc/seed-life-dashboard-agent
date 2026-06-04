@@ -72,12 +72,20 @@ echo "OK   v-bundles ($CONTAINER_UUID)"
 # resolve and the wrapper executes; it does NOT post over the network.
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 DRY_INPUT=$(mktemp -t agent-verify-msg)
+DRY_OUT=$(mktemp -t agent-verify-out)
+trap 'rm -f "$DRY_INPUT" "$DRY_OUT"' EXIT
 echo "hello from verify" > "$DRY_INPUT"
+# Capture the dry-run's exit status explicitly (no `|| true`): a hard
+# failure (e.g. a Python import error in the wrapper) must fail verify,
+# not be silently masked so the grep becomes the only signal. The
+# output goes to a private mktemp file (not a fixed world-readable
+# /tmp path) to avoid symlink/TOCTOU + concurrent-run collisions.
+DRY_RC=0
 PYTHONPATH="$SEED_ROOT/ref/team-skills/ld-shared/scripts" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
 DRY_INPUT="$DRY_INPUT" \
-python3 - <<'PY' >/tmp/agent-verify-out 2>&1 || true
+python3 - >"$DRY_OUT" 2>&1 <<'PY' || DRY_RC=$?
 import os, sys, importlib.util
 spec = importlib.util.spec_from_file_location(
     "post_to_kiosk",
@@ -99,10 +107,13 @@ except SystemExit as e:
     if e.code not in (None, 0):
         raise
 PY
-rm -f "$DRY_INPUT"
-grep -qE '<redacted, [0-9]+ chars>' /tmp/agent-verify-out \
-  || { echo "FAIL v-dry-run: no redacted-body output line in /tmp/agent-verify-out" >&2; head -20 /tmp/agent-verify-out >&2; exit 1; }
-rm -f /tmp/agent-verify-out
+if [ "$DRY_RC" != "0" ]; then
+  echo "FAIL v-dry-run: wrapper exited non-zero ($DRY_RC)" >&2
+  head -20 "$DRY_OUT" >&2
+  exit 1
+fi
+grep -qE '<redacted, [0-9]+ chars>' "$DRY_OUT" \
+  || { echo "FAIL v-dry-run: no redacted-body output line in $DRY_OUT" >&2; head -20 "$DRY_OUT" >&2; exit 1; }
 echo "OK   v-dry-run"
 
 echo "tree conforms"
