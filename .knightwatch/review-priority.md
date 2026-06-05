@@ -13,7 +13,7 @@ PR-relevant distillation; edit there first, re-distill here.
 collapse, inline) outrank additive ones at every severity. The prose spec is
 the contract; `ref/` is one realization of it. Apply the universal
 Broken-Glass posture from `standards.md` § Broken-Glass Test. The structural
-gate is falsifiable: `ref/verify.sh` must stay green (it implements the three
+gate is falsifiable: `ref/verify.sh` must stay green (it implements the four
 SEED structural Verify prompts).
 
 **Repo-specific contrast pairs (beyond the universal set in `standards.md`):**
