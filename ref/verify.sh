@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+# shellcheck source=ref/lib/ld_config.sh
+. "$SEED_ROOT/ref/lib/ld_config.sh"
+
 PLOW_BUNDLE_ID="${PLOW_BUNDLE_ID:-co.plow.app}"
 APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
 SECRETS_DIR="$APP_SUPPORT/agent-runtime/secrets"
@@ -19,24 +23,13 @@ done
 echo "OK   v-secrets"
 
 # v1b: ld-config present + parses as JSON + REQUIRED fields resolved.
-# Presence + JSON-parse is the floor; the required-field check mirrors
-# install-bundles.sh's pre-mutation gate EXACTLY — block only on the
-# fields the bundles cannot function without:
-#   - family.owner.name      ([OWNER_NAME])
-#   - family.owner.imessage  ([OWNER_IMESSAGE])
-#   - at least ONE real calendar.sources[].account
-# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
-# [LONG_LEAD_TYPE]) intentionally do NOT block — single-parent /
-# single-calendar homes leave them as-is.
+# Presence + JSON-parse is the floor; the required-field check uses the
+# SAME ld_config_missing_required gate install-bundles.sh enforces
+# pre-mutation (contract defined in ref/lib/ld_config.sh), so install and
+# verify can never drift.
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-PH='test("\\[[A-Z][A-Z0-9_]*\\]")'
-MISSING=$(jq -r "
-  [ (if (.family.owner.name      // \"\" | $PH) then \"family.owner.name\"      else empty end),
-    (if (.family.owner.imessage  // \"\" | $PH) then \"family.owner.imessage\"  else empty end),
-    (if ([ .calendar.sources[]?.account // \"\" | select($PH | not) ] | length) == 0
-       then \"calendar.sources[].account (need at least one real account)\" else empty end)
-  ] | .[]" "$LD_CONFIG")
+MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
   echo "FAIL v-ld-config: $LD_CONFIG is missing required household values:" >&2
   echo "$MISSING" | sed 's/^/  - /' >&2
@@ -77,7 +70,6 @@ echo "OK   v-bundles ($CONTAINER_UUID)"
 # wrapper code that's installed inside the VM, just executed from the
 # host with rebound module-level constants. This proves the secrets
 # resolve and the wrapper executes; it does NOT post over the network.
-SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 DRY_INPUT=$(mktemp -t agent-verify-msg)
 DRY_OUT=$(mktemp -t agent-verify-out)
 trap 'rm -f "$DRY_INPUT" "$DRY_OUT"' EXIT

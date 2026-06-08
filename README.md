@@ -38,7 +38,7 @@ The supplied bytes are validated as JSON and written atomically. Invalid JSON or
 
 The install/verify gate blocks **only** on the fields the bundles cannot run without:
 
-- **Required** — `family.owner.name`, `family.owner.imessage`, and at least one real `calendar.sources[].account`.
+- **Required** — `family.owner.name`, `family.owner.imessage`, and at least one `calendar.sources` row, where **every** present row has a real (non-empty, non-placeholder) `account` (each source is fetched at runtime, so an empty/placeholder account would be a bogus fetch target).
 - **Optional** — partner (`[PARTNER_*]`), additional people (`[FAMILY_PERSON_*]`), extra calendars (`[FAMILY_CALENDAR_ID]`), and long-lead type (`[LONG_LEAD_TYPE]`) may be left as placeholders or empty. `family.timezone` ships a real default.
 
 This lets single-parent / single-calendar households complete an unattended install — only the required fields need real values.

@@ -16,6 +16,11 @@ test:
     # bash-parse checks first — fail fast on syntax errors.
     bash -n ref/install-bundles.sh
     bash -n ref/verify.sh
+    bash -n ref/lib/ld_config.sh
+    # Behavioral coverage of the operator-facing install/verify contract:
+    # the ld-config landing paths + the required-field gate that both
+    # install-bundles.sh and verify.sh enforce (ref/lib/ld_config.sh).
+    bash ref/lib/test_ld_config.sh
     # Vendored bundle tests — the actual value this justfile provides
     # over the other SEEDs in the graph (which carry no executable
     # source). Seed-convention structural verification is a separate

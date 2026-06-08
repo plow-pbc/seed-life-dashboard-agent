@@ -7,10 +7,7 @@
   },
   "calendar": {
     "sources": [
-      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "primary", "name": "Personal" },
-      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "[FAMILY_CALENDAR_ID]", "name": "Family shared" },
-      { "account": "[CALENDAR_ACCOUNT_2]", "calendar_id": "primary", "name": "Work" },
-      { "account": "[PARTNER_CALENDAR_ACCOUNT]", "calendar_id": "primary", "name": "Partner", "self": false }
+      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "primary", "name": "Personal" }
     ]
   },
   "morning_updates": {
@@ -18,7 +15,7 @@
   },
   "weekly_digest": {
     "length": "",
-    "long_lead": [{ "type": "[LONG_LEAD_TYPE]", "lead_days": 7 }]
+    "long_lead": []
   },
   "morning_triage": {
     "ranking_instructions": "",

@@ -52,6 +52,8 @@ for tool in jq tar lsof pgrep python3 awk; do
 done
 
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+# shellcheck source=ref/lib/ld_config.sh
+. "$SEED_ROOT/ref/lib/ld_config.sh"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
 [ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
 LD_CONFIG_EXAMPLE="$BUNDLES_DIR/ld-shared/references/config.example.json"
@@ -114,100 +116,19 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Land ld-config. Three ways the file gets populated, in priority:
-#
-#   (a) Already present  — operator's prior edits are canonical; never
-#       overwrite. (re-run safety)
-#   (b) LD_CONFIG_SRC set — consume a supplied household config from a
-#       file path, `-` (stdin), or an `https://` URL. The supplied JSON
-#       is validated well-formed and written atomically (tempfile +
-#       `mv`, mode 600). Invalid JSON or a non-200 URL FAILS LOUD with
-#       a non-zero exit — never a partial write, never a silent no-op.
-#   (c) Neither          — copy the vendored example (placeholders the
-#       operator fills in). The SEED never invents household values.
-#
-# After the file exists, the install gates on REQUIRED placeholders
-# only (owner name + imessage + at least one real calendar account).
-# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
-# [LONG_LEAD_TYPE]) may stay as-is so single-parent / single-calendar
-# homes complete unattended. A remaining REQUIRED placeholder is a hard
-# stop (non-zero) — distinct from a successful install — because the
-# bundles would fail at their first scheduled tick against it.
-#
-# Config values are PII (iMessage handles, family names) — never echoed.
-mkdir -p "$LD_CONFIG_DIR"
-if [ -f "$LD_CONFIG" ]; then
-  : # (a) preserve operator edits
-elif [ -n "${LD_CONFIG_SRC:-}" ]; then
-  # (b) consume supplied config. Read raw bytes first, validate JSON,
-  #     then write atomically — so a malformed source never lands.
-  TMP_CFG=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
-  trap 'rm -f "$TMP_CFG"' EXIT
-  case "$LD_CONFIG_SRC" in
-    https://*)
-      # Fetch via Python stdlib (same _NoRedirect discipline as the
-      # bundle POST); a non-200 raises HTTPError -> non-zero exit.
-      LD_CONFIG_SRC="$LD_CONFIG_SRC" python3 - > "$TMP_CFG" <<'PY' \
-        || { echo "LD_CONFIG_SRC: failed to fetch config from URL" >&2; exit 1; }
-import os, sys, urllib.error, urllib.request
+# 6. Land ld-config (resolution + landing contract lives in
+#    ref/lib/ld_config.sh so `just test` covers it). Three ways the file
+#    gets populated, in priority: (a) already present -> preserve; (b)
+#    LD_CONFIG_SRC -> consume a supplied config (file / `-` stdin /
+#    https:// URL), JSON-validated AND required-field-gated BEFORE the
+#    atomic mv so nothing bad lands; (c) neither -> copy the vendored
+#    example. Config values are PII — never echoed.
+ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE"
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(
-            req.full_url, code,
-            f"unexpected redirect to {newurl}", headers, fp,
-        )
-
-opener = urllib.request.build_opener(_NoRedirect())
-req = urllib.request.Request(os.environ["LD_CONFIG_SRC"], method="GET")
-try:
-    with opener.open(req, timeout=60) as resp:
-        sys.stdout.buffer.write(resp.read())
-except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
-    sys.exit(f"{exc}")
-PY
-      ;;
-    -)
-      cat > "$TMP_CFG" || { echo "LD_CONFIG_SRC=-: failed to read config from stdin" >&2; exit 1; }
-      ;;
-    *)
-      [ -f "$LD_CONFIG_SRC" ] || { echo "LD_CONFIG_SRC: no such file: $LD_CONFIG_SRC" >&2; exit 1; }
-      cat "$LD_CONFIG_SRC" > "$TMP_CFG" || { echo "LD_CONFIG_SRC: failed to read $LD_CONFIG_SRC" >&2; exit 1; }
-      ;;
-  esac
-  jq -e . "$TMP_CFG" >/dev/null 2>&1 \
-    || { echo "LD_CONFIG_SRC: supplied config is not valid JSON — refusing to land a partial config" >&2; exit 1; }
-  chmod 600 "$TMP_CFG"
-  mv "$TMP_CFG" "$LD_CONFIG"
-  trap - EXIT
-  echo "" >&2
-  echo "ld-config landed at $LD_CONFIG from LD_CONFIG_SRC." >&2
-else
-  # (c) first install with no supplied config — copy the example.
-  cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
-  chmod 600 "$LD_CONFIG"
-  echo "" >&2
-  echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
-fi
-
-# REQUIRED-field placeholder gate. We block ONLY on fields the bundles
-# cannot function without:
-#   - family.owner.name      ([OWNER_NAME])
-#   - family.owner.imessage  ([OWNER_IMESSAGE])
-#   - at least ONE real calendar.sources[].account (block only if EVERY
-#     account is still an [UPPER_SNAKE] placeholder)
-# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
-# [LONG_LEAD_TYPE]) intentionally do NOT block — single-parent /
-# single-calendar households leave them as-is. family.timezone already
-# ships a real default. jq emits the names of unfilled required fields
-# (field NAMES only, never the PII values) for an actionable message.
-PH='test("\\[[A-Z][A-Z0-9_]*\\]")'
-MISSING=$(jq -r "
-  [ (if (.family.owner.name      // \"\" | $PH) then \"family.owner.name\"      else empty end),
-    (if (.family.owner.imessage  // \"\" | $PH) then \"family.owner.imessage\"  else empty end),
-    (if ([ .calendar.sources[]?.account // \"\" | select($PH | not) ] | length) == 0
-       then \"calendar.sources[].account (need at least one real account)\" else empty end)
-  ] | .[]" "$LD_CONFIG")
+# REQUIRED-field placeholder gate (contract defined in ref/lib/ld_config.sh,
+# shared with verify.sh). Emits the NAMES of unfilled required fields only —
+# never the PII values — for an actionable message.
+MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
   echo "" >&2
   echo "ld-config at $LD_CONFIG is missing REQUIRED household values:" >&2
