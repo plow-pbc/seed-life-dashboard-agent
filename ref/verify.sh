@@ -22,18 +22,19 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
-# v1b: ld-config present + parses as JSON + REQUIRED fields resolved.
-# Presence + JSON-parse is the floor; the required-field check uses the
-# SAME ld_config_missing_required gate install-bundles.sh enforces
-# pre-mutation (contract defined in ref/lib/ld_config.sh), so install and
-# verify can never drift.
+# v1b: ld-config present + parses as JSON + passes the minimal gate.
+# Presence + JSON-parse is the floor; the gate check (non-empty sources
+# array + no remaining [UPPER_SNAKE] placeholder) uses the SAME
+# ld_config_missing_required gate install-bundles.sh enforces pre-mutation
+# (contract defined in ref/lib/ld_config.sh), so install and verify can
+# never drift.
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
 MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
-  echo "FAIL v-ld-config: $LD_CONFIG is missing required household values:" >&2
+  echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate:" >&2
   echo "$MISSING" | sed 's/^/  - /' >&2
-  echo "Fill these in (or re-run install with LD_CONFIG_SRC) before verifying." >&2
+  echo "Fill in the placeholders / fix calendar.sources (or re-run install with LD_CONFIG_SRC) before verifying." >&2
   exit 1
 fi
 echo "OK   v-ld-config"

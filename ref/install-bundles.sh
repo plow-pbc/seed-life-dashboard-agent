@@ -11,11 +11,12 @@
 # (a file path or `-` for stdin) when set, otherwise
 # from the vendored example.
 #
-# The bundle POST is GATED on REQUIRED ld-config fields only — owner
-# name + imessage + at least one real calendar account. Optional fields
-# (partner, extra people/calendars, long-lead type) may stay as
-# placeholders so single-parent / single-calendar homes install
-# unattended. A remaining required placeholder is a hard NON-ZERO stop.
+# The bundle POST is GATED on the minimal ld-config contract — a
+# non-empty calendar.sources array and NO remaining [UPPER_SNAKE]
+# placeholder anywhere (the example ships placeholders only for the
+# fields the operator must fill, so single-parent / single-calendar
+# homes still install unattended). A failing gate is a hard NON-ZERO
+# stop. Per-field requirements are enforced at runtime by each bundle.
 #
 # Relay-state validation + ld-config write happen BEFORE the bundle
 # POST so that no scheduled code is activated until the runtime
@@ -120,25 +121,27 @@ mv "$TMP" "$SECRETS_DIR/dashboard-token"
 #    ref/lib/ld_config.sh so `just test` covers it). Three ways the file
 #    gets populated, in priority: (a) already present -> preserve; (b)
 #    LD_CONFIG_SRC -> consume a supplied config (file / `-` stdin),
-#    JSON-validated AND required-field-gated BEFORE the
+#    JSON-validated AND minimal-gated BEFORE the
 #    atomic mv so nothing bad lands; (c) neither -> copy the vendored
 #    example. Config values are PII — never echoed.
 ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE"
 
-# REQUIRED-field placeholder gate (contract defined in ref/lib/ld_config.sh,
-# shared with verify.sh). Emits the NAMES of unfilled required fields only —
+# Minimal install gate (contract defined in ref/lib/ld_config.sh, shared with
+# verify.sh): calendar.sources is a non-empty array AND no [UPPER_SNAKE]
+# placeholder remains anywhere. Emits the failing invariant's NAME only —
 # never the PII values — for an actionable message.
 MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
   echo "" >&2
-  echo "ld-config at $LD_CONFIG is missing REQUIRED household values:" >&2
+  echo "ld-config at $LD_CONFIG does not pass the install gate:" >&2
   echo "$MISSING" | sed 's/^/  - /' >&2
   echo "" >&2
-  echo "Fill these in (or supply a complete config via LD_CONFIG_SRC) and" >&2
-  echo "re-run this install. Optional fields (partner, additional people," >&2
-  echo "extra calendars, long-lead type) may be left as placeholders." >&2
-  echo "The bundle install is GATED on the required fields — the bundles" >&2
-  echo "would fail at their first scheduled tick otherwise." >&2
+  echo "Fill in the [UPPER_SNAKE] placeholders (owner identity + at least one" >&2
+  echo "calendar account) and ensure calendar.sources is a non-empty array," >&2
+  echo "then re-run this install (or supply a complete config via LD_CONFIG_SRC)." >&2
+  echo "Optional sections (partner, additional people, extra calendars," >&2
+  echo "long-lead type) may be left empty. Per-field requirements are enforced" >&2
+  echo "at runtime by each bundle." >&2
   echo "NOT installed." >&2
   exit 1
 fi

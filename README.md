@@ -31,16 +31,16 @@ You can supply a complete config via the **`LD_CONFIG_SRC`** environment variabl
 - a **file path** — `LD_CONFIG_SRC=/path/to/config.json`
 - `-` to read from **stdin** — `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
 
-The supplied bytes are validated as JSON, run through the required-field gate, and written atomically. Invalid JSON or an incomplete config fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
+The supplied bytes are validated as JSON, run through the minimal install gate, and written atomically. Invalid JSON or a config that fails the gate fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
 
-### Required vs optional fields
+### The install gate
 
-The install/verify gate blocks **only** on the fields the bundles cannot run without:
+The install/verify gate is deliberately **minimal**. It checks two structural invariants that distinguish an unedited template from a filled config:
 
-- **Required** (exactly the fields the scheduled bundles throw on at their first tick) — `family.owner.name`, `family.owner.imessage`, `family.timezone`, `calendar_nudge.lookahead_virtual_minutes` + `calendar_nudge.lookahead_in_person_minutes` (both numbers), and at least one `calendar.sources` row, where **every** present row has a real (non-empty, non-placeholder) `account` **and** `calendar_id` (each source is fetched at runtime, so an empty/placeholder value would be a bogus fetch target) **and at least one row is an owner source** (`self != false`) — the bundle builds the household's own identity set from the non-`self:false` rows and throws when that set is empty, so an all-`self:false` config can't run. `family.timezone` and the lookaheads ship real defaults in the vendored example, so a hand-edited install passes them for free — they only need real values in a supplied (`LD_CONFIG_SRC`) config that overrides them.
-- **Optional** — partner (`[PARTNER_*]`), additional people (`[FAMILY_PERSON_*]`), and long-lead type (`[LONG_LEAD_TYPE]`) may be left as placeholders or empty.
+- **`calendar.sources` is a non-empty array** — the bundles iterate it at runtime, so an object-valued or empty sources is unusable.
+- **No `[UPPER_SNAKE]` placeholder remains anywhere** — the vendored example ships placeholders **only** for the fields the operator must provide (owner identity — `[OWNER_NAME]`, `[OWNER_IMESSAGE]` — and at least one calendar `[CALENDAR_ACCOUNT]`), with real defaults for `family.timezone` and the `calendar_nudge` lookaheads and empty/omitted optional sections (partner, additional people, extra calendars, long-lead). So "no placeholder left" is exactly "every required field was filled" — and single-parent / single-calendar households pass without editing optional fields.
 
-This lets single-parent / single-calendar households complete an unattended install — only the required fields need real values.
+Per-field requirements (a finite lookahead, a non-`self:false` owner source, every source carrying a real `account`/`calendar_id`) are **enforced at runtime by each bundle**, which is the single source of truth for them — the install gate intentionally does not duplicate that list.
 
 ## License
 

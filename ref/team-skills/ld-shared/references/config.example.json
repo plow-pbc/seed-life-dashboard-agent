@@ -1,13 +1,13 @@
 {
   "family": {
     "owner": { "name": "[OWNER_NAME]", "imessage": "[OWNER_IMESSAGE]" },
-    "partner": { "name": "[PARTNER_NAME]", "imessage": "[PARTNER_IMESSAGE]" },
-    "people": ["[FAMILY_PERSON_1]", "[FAMILY_PERSON_2]"],
+    "partner": null,
+    "people": [],
     "timezone": "America/Los_Angeles"
   },
   "calendar": {
     "sources": [
-      { "account": "[CALENDAR_ACCOUNT_1]", "calendar_id": "primary", "name": "Personal" }
+      { "account": "[CALENDAR_ACCOUNT]", "calendar_id": "primary", "name": "Personal" }
     ]
   },
   "morning_updates": {

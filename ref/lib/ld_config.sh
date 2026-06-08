@@ -1,71 +1,48 @@
 # shellcheck shell=bash
-# ld-config required-field gate — shared by ref/install-bundles.sh (the
+# ld-config minimal install gate — shared by ref/install-bundles.sh (the
 # pre-mutation install gate) and ref/verify.sh (the post-install check),
 # so the two enforce EXACTLY the same contract from a single source.
 #
-# Block on EXACTLY the fields the scheduled bundles throw-on-missing at their
-# first tick — no more (so single-parent/single-calendar homes still pass),
-# no less (so an install can't pass the gate yet die on the first tick). The
-# set is derived from ld-calendar-nudge/scheduled/run.js (the only bundle
-# with runtime code today):
-#   - family.owner.name      ([OWNER_NAME] placeholder, empty, or missing) —
-#     household identity consumed by the bundles.
-#   - family.owner.imessage  ([OWNER_IMESSAGE] placeholder, empty, or missing)
-#   - family.timezone        (run.js:135 throws if missing/empty — drives the
-#     :20/:50 self-gate and reminder time formatting)
-#   - calendar.sources       — at least ONE row (run.js:146), and EVERY present
-#     row must have a non-empty, non-placeholder `account` (run.js:150 — fetched
-#     at the first tick, so a "" or [UPPER_SNAKE] account is a bogus target)
-#     AND a non-empty, non-placeholder `calendar_id` (run.js:150). At least ONE
-#     row must also be an OWNER source (`self != false`) — run.js:160 builds the
-#     owner-identity set from `sources.filter(s => s.self !== false)` and throws
-#     (run.js:162) when it is empty, so an all-`self:false` config passes a
-#     sources-only check yet dies on the first tick.
-#   - calendar_nudge.lookahead_virtual_minutes  (run.js:157 throws unless a
-#     finite number) and
-#   - calendar_nudge.lookahead_in_person_minutes (run.js:157, same).
+# The gate is deliberately MINIMAL. Rather than mirror run.js's field-by-field
+# requirements (a list that drifted from the runtime contract across four review
+# rounds), it checks only the two structural invariants that distinguish an
+# UNEDITED template from a FILLED config:
+#   1. calendar.sources is a non-empty ARRAY. (run.js requires Array.isArray +
+#      length>=1; an object-valued or empty sources is an unusable config.)
+#   2. NO [UPPER_SNAKE] placeholder token survives ANYWHERE in the config — the
+#      example ships placeholders ONLY for fields the operator MUST provide, so
+#      "no placeholder remains" is exactly "every required field was filled."
 #
-# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], extra calendars beyond the
-# first row's id, [LONG_LEAD_TYPE], and the morning_*/weekly_digest blocks the
-# skeleton bundles don't yet read) intentionally do NOT block — single-parent /
-# single-calendar households leave them as-is.
+# The "what must be filled" requirement now lives in the EXAMPLE template, not
+# here: the example carries [UPPER_SNAKE] placeholders for owner identity and at
+# least one calendar `account`, real defaults for timezone/lookaheads, and
+# empty/omitted optional sections — so single-parent / single-calendar homes
+# pass without editing optional fields. Per-field runtime requirements (a finite
+# lookahead, a non-`self:false` owner source, etc.) are enforced at runtime by
+# each bundle, which is the single source of truth for them.
 #
-# Echoes the NAMES of unfilled required fields only (never the PII values).
+# Echoes the NAMES of failing checks only (never the PII values).
 # bash-3.2-safe; requires `jq` on PATH.
 
 # ld_config_missing_required <config-path>
-# Prints the field-name lines that are still unfilled (one per line) to
-# stdout; prints nothing when all required fields are satisfied. Returns
-# jq's exit status (non-zero only on a malformed config / read error).
+# Prints a line per failing check to stdout; prints nothing when the config
+# passes the minimal gate. Returns jq's exit status (non-zero only on a
+# malformed config / read error).
 ld_config_missing_required() {
   local cfg="$1"
-  # `$ph` matches an [UPPER_SNAKE] placeholder; an empty string fails the
-  # non-placeholder test below because "" is not a real value either.
-  local ph='test("\\[[A-Z][A-Z0-9_]*\\]")'
-  jq -r "
-    # realstr: a real string value — non-empty and NOT an [UPPER_SNAKE]
-    # placeholder. (Callers funnel every checked field through \`// \"\"\`, so
-    # the input is always a string here; \"\" fails as not a real value.)
-    def realstr: . != \"\" and ($ph | not);
-    # finitenum: a JSON number (valid JSON has no NaN/Inf, so any number is
-    # finite — matches run.js Number.isFinite()).
-    def finitenum: type == \"number\";
-    [ (if (.family.owner.name     // \"\" | realstr | not) then \"family.owner.name\"     else empty end),
-      (if (.family.owner.imessage // \"\" | realstr | not) then \"family.owner.imessage\" else empty end),
-      (if (.family.timezone       // \"\" | realstr | not) then \"family.timezone\"        else empty end),
-      (if ((.calendar.sources // []) | length) == 0
-         then \"calendar.sources (need at least one calendar source)\"
-       elif ([ .calendar.sources[] | .account // \"\" | select(realstr | not) ] | length) > 0
-         then \"calendar.sources[].account (every source needs a real, non-placeholder account)\"
-       elif ([ .calendar.sources[] | .calendar_id // \"\" | select(realstr | not) ] | length) > 0
-         then \"calendar.sources[].calendar_id (every source needs a real, non-placeholder calendar_id)\"
-       elif ([ .calendar.sources[] | select(.self != false) ] | length) == 0
-         then \"calendar.sources[].self (need at least one owner source with self != false)\"
+  jq -r '
+    [ (if (.calendar.sources | type) != "array"
+         then "calendar.sources (must be a non-empty array)"
+       elif (.calendar.sources | length) == 0
+         then "calendar.sources (need at least one calendar source)"
        else empty end),
-      (if (.calendar_nudge.lookahead_virtual_minutes   | finitenum | not) then \"calendar_nudge.lookahead_virtual_minutes\"   else empty end),
-      (if (.calendar_nudge.lookahead_in_person_minutes | finitenum | not) then \"calendar_nudge.lookahead_in_person_minutes\" else empty end)
+      # Any [UPPER_SNAKE] placeholder anywhere in the config means the operator
+      # left a required field unedited. Walk every string leaf via `..`.
+      (if [ .. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]")) ] | length > 0
+         then "config still contains [UPPER_SNAKE] placeholders (fill them in)"
+       else empty end)
     ] | .[]
-  " "$cfg"
+  ' "$cfg"
 }
 
 # ld_config_resolve_and_land <dest> <example-path>

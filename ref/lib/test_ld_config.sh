@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Behavioral tests for ref/lib/ld_config.sh — the install/verify ld-config
-# landing + required-field gate. This is the operator-facing contract that
+# landing + minimal install gate. This is the operator-facing contract that
 # `ref/install-bundles.sh` and `ref/verify.sh` both enforce, so it is the
-# part that, if it regressed, would let a placeholder/empty/incomplete
-# household config pass install and then break the bundles at their first
-# scheduled tick. We assert the OBSERVABLE outcome of each scenario (did a
-# file land? what fields did the gate name?), not internal call order.
+# part that, if it regressed, would let an unedited/malformed household config
+# pass install. The minimal gate checks two structural invariants:
+# calendar.sources is a non-empty array, and no [UPPER_SNAKE] placeholder
+# survives anywhere. We assert the OBSERVABLE outcome of each scenario (did a
+# file land with the right bytes + mode? what did the gate name?), not internal
+# call order.
 #
 # bash-3.2-safe; requires jq + python3 on PATH (same as the scripts).
 
@@ -28,38 +30,31 @@ check() {
   fi
 }
 
-# A complete, gate-passing household config: every field the scheduled bundles
-# throw-on-missing is filled (owner name/imessage, family.timezone, a source
-# with real account+calendar_id, and both calendar_nudge lookaheads).
+# A filled, gate-passing household config: no [UPPER_SNAKE] placeholders remain
+# and calendar.sources is a non-empty array.
 GOOD_CFG='{"family":{"owner":{"name":"Sam","imessage":"sam@example.com"},"timezone":"America/Los_Angeles"},
            "calendar":{"sources":[{"account":"sam@example.com","calendar_id":"primary"}]},
            "calendar_nudge":{"lookahead_virtual_minutes":30,"lookahead_in_person_minutes":60}}'
 
 newdir() { mktemp -d "${TMPDIR:-/tmp}/ld-test.XXXXXX"; }
 
-# ───────────────────────── gate: required fields ─────────────────────────
+# ─────────────────────────── minimal gate matrix ───────────────────────────
 # One parametrized matrix: each row is (label, config-json, expected-substr).
-# expected-substr empty means "gate must pass (emit nothing)".
-# A reusable "everything else filled" prefix so each row varies only the
-# field under test. ${GG} expands to the GOOD_CFG fields EXCEPT calendar, which
-# each row appends so it can vary the sources.
-GG='"family":{"owner":{"name":"Sam","imessage":"x@y"},"timezone":"America/Los_Angeles"},"calendar_nudge":{"lookahead_virtual_minutes":30,"lookahead_in_person_minutes":60}'
+# expected-substr empty means "gate must pass (emit nothing)". The minimal gate
+# enforces exactly two invariants: calendar.sources is a non-empty array, and
+# no [UPPER_SNAKE] placeholder survives anywhere. Per-field requirements
+# (timezone, lookaheads, owner source) are enforced at runtime by the bundles,
+# NOT by this gate — so a config that omits them still passes here.
 gate_cases=(
-  "all required present -> passes|$GOOD_CFG|"
-  "minimal complete (GG prefix + one real source) -> passes|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|"
-  "placeholder owner.name rejected|{\"family\":{\"owner\":{\"name\":\"[OWNER_NAME]\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.name"
-  "placeholder owner.imessage rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"[OWNER_IMESSAGE]\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.imessage"
-  "missing family.timezone rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.timezone"
-  "empty account rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"\",\"calendar_id\":\"primary\"}]}}|calendar.sources[].account"
-  "placeholder account among real rows rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"},{\"account\":\"[CALENDAR_ACCOUNT_2]\",\"calendar_id\":\"primary\"}]}}|calendar.sources[].account"
-  "missing calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|calendar.sources[].calendar_id"
-  "placeholder calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"[FAMILY_CALENDAR_ID]\"}]}}|calendar.sources[].calendar_id"
-  "zero calendar sources rejected|{$GG,\"calendar\":{\"sources\":[]}}|calendar.sources (need at least one"
-  "all-self:false sources rejected (no owner identity)|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"self\":false}]}}|calendar.sources[].self"
-  "mixed self:false + one owner source passes|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"self\":false},{\"account\":\"c@d\",\"calendar_id\":\"primary\"}]}}|"
-  "missing lookahead_virtual_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_virtual_minutes"
-  "non-numeric lookahead_in_person_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":\"60\"},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_in_person_minutes"
-  "optional placeholders (partner/people/long_lead) allowed|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\",\"partner\":{\"name\":\"[PARTNER_NAME]\"},\"people\":[\"[FAMILY_PERSON_1]\"]},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[{\"type\":\"[LONG_LEAD_TYPE]\"}]}}|"
+  "filled config (no placeholders, non-empty sources array) -> passes|$GOOD_CFG|"
+  "single-parent / single-calendar (minimal filled) -> passes|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|"
+  "any remaining [UPPER_SNAKE] placeholder rejected (owner)|{\"family\":{\"owner\":{\"name\":\"[OWNER_NAME]\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|[UPPER_SNAKE] placeholders"
+  "placeholder anywhere rejected (calendar account)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"[CALENDAR_ACCOUNT]\",\"calendar_id\":\"primary\"}]}}|[UPPER_SNAKE] placeholders"
+  "placeholder in an OPTIONAL section still rejected (no template residue)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":{\"name\":\"[PARTNER_NAME]\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|[UPPER_SNAKE] placeholders"
+  "non-array calendar.sources rejected (object-valued)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":{\"account\":\"a@b\",\"calendar_id\":\"primary\"}}}|must be a non-empty array"
+  "empty calendar.sources array rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[]}}|need at least one"
+  "missing calendar.sources rejected (null is not an array)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}}}|must be a non-empty array"
+  "vendored example with empty optionals -> only owner+account placeholders block|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":null,\"people\":[]},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[]}}|"
 )
 for row in "${gate_cases[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
@@ -80,15 +75,20 @@ out="$(ld_config_missing_required "$EXAMPLE")"
 
 # ──────────────────── landing: resolve_and_land paths ────────────────────
 
-# (b) file source, gate-passing -> lands the file.
+# Octal mode of a file, portable across GNU (-c %a) and BSD/macOS (-f %Lp) stat.
+filemode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+
+# (b) file source, gate-passing -> lands the EXACT supplied bytes at mode 600.
 d="$(newdir)"; printf '%s' "$GOOD_CFG" > "$d/src.json"
 LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
-[ -f "$d/ld/config.json" ]; check "LD_CONFIG_SRC=file lands a complete config" "$?"
+[ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ] && [ "$(filemode "$d/ld/config.json")" = "600" ]
+check "LD_CONFIG_SRC=file lands the supplied bytes verbatim at mode 600" "$?"
 
-# (b) stdin source (`-`), gate-passing -> lands the piped bytes.
+# (b) stdin source (`-`), gate-passing -> lands the EXACT piped bytes at mode 600.
 d="$(newdir)"
 printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
-[ -f "$d/ld/config.json" ]; check "LD_CONFIG_SRC=- reads config from stdin" "$?"
+[ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ] && [ "$(filemode "$d/ld/config.json")" = "600" ]
+check "LD_CONFIG_SRC=- lands the piped bytes verbatim at mode 600" "$?"
 
 # (b) invalid JSON -> non-zero, NO file written.
 d="$(newdir)"; printf 'not json{' > "$d/src.json"
