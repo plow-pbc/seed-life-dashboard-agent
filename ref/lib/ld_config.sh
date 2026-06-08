@@ -9,9 +9,11 @@
 # UNEDITED template from a FILLED config:
 #   1. calendar.sources is a non-empty ARRAY. (run.js requires Array.isArray +
 #      length>=1; an object-valued or empty sources is an unusable config.)
-#   2. NO [UPPER_SNAKE] placeholder token survives ANYWHERE in the config — the
-#      example ships placeholders ONLY for fields the operator MUST provide, so
-#      "no placeholder remains" is exactly "every required field was filled."
+#   2. NO string value is left as a bare [UPPER_SNAKE] placeholder — the match
+#      is whole-string anchored, so a real value that merely CONTAINS a bracketed
+#      token (e.g. a calendar named "Work [TEAM]") is fine. The example ships
+#      placeholders ONLY for fields the operator MUST provide, so "no bare
+#      placeholder remains" is exactly "every required field was filled."
 #
 # The "what must be filled" requirement now lives in the EXAMPLE template, not
 # here: the example carries [UPPER_SNAKE] placeholders for owner identity and at
