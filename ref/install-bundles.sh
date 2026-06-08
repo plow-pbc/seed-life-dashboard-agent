@@ -7,9 +7,9 @@
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
 # the two secret files. The ld-config is landed ONLY on first install
-# (subsequent runs preserve operator edits); it comes from LD_CONFIG_SRC
-# (a file path or `-` for stdin) when set, otherwise
-# from the vendored example.
+# (subsequent runs preserve operator edits); it comes from LD_CONFIG_SRC=-
+# (config piped via stdin) when set, otherwise from the vendored example
+# (which the operator edits in place).
 #
 # The bundle POST is GATED on the minimal ld-config contract — a
 # non-empty calendar.sources array and NO remaining [UPPER_SNAKE]
@@ -120,7 +120,7 @@ mv "$TMP" "$SECRETS_DIR/dashboard-token"
 # 6. Land ld-config (resolution + landing contract lives in
 #    ref/lib/ld_config.sh so `just test` covers it). Three ways the file
 #    gets populated, in priority: (a) already present -> preserve; (b)
-#    LD_CONFIG_SRC -> consume a supplied config (file / `-` stdin),
+#    LD_CONFIG_SRC=- -> consume a supplied config from stdin,
 #    JSON-validated AND minimal-gated BEFORE the
 #    atomic mv so nothing bad lands; (c) neither -> copy the vendored
 #    example. Config values are PII — never echoed.

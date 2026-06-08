@@ -26,12 +26,11 @@ The umbrella [`seed-life-dashboard`](https://github.com/plow-pbc/seed-life-dashb
 
 On first install the SEED lands a household config at `~/Library/Application Support/co.plow.app/agent-runtime/runtime/ld/config.json` (mode 600). Re-runs preserve operator edits.
 
-You can supply a complete config via the **`LD_CONFIG_SRC`** environment variable, set to:
+For unattended/autonomous installs, pipe a complete config via the **`LD_CONFIG_SRC`** environment variable, set to **`-` (stdin) only**:
 
-- a **file path** — `LD_CONFIG_SRC=/path/to/config.json`
-- `-` to read from **stdin** — `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
+- `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
 
-The supplied bytes are validated as JSON, run through the minimal install gate, and written atomically. Invalid JSON or a config that fails the gate fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
+The supplied bytes are validated as JSON, run through the minimal install gate, and written atomically. Invalid JSON or a config that fails the gate fails loud with a non-zero exit (no partial config is ever written); any other `LD_CONFIG_SRC` value is rejected loud. When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
 
 ### The install gate
 

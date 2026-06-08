@@ -57,17 +57,19 @@ ld_config_missing_required() {
 #
 #   (a) <dest> already present — operator's prior edits are canonical;
 #       leave it untouched (re-run safety).
-#   (b) LD_CONFIG_SRC set       — consume a supplied household config from a
-#       file path or `-` (stdin). The bytes are
-#       JSON-validated AND run through ld_config_missing_required BEFORE the
-#       atomic mv, so a malformed OR incomplete supplied config NEVER lands
-#       (a landed-but-bad file would make case (a) short-circuit every
-#       retry). Fails loud, non-zero, no partial write.
+#   (b) LD_CONFIG_SRC=-          — consume a supplied household config from
+#       stdin (the ONLY non-interactive supply path; agents/autonomous
+#       installs pipe the bytes in). The bytes are JSON-validated AND run
+#       through ld_config_missing_required BEFORE the atomic mv, so a
+#       malformed OR incomplete supplied config NEVER lands (a landed-but-bad
+#       file would make case (a) short-circuit every retry). Fails loud,
+#       non-zero, no partial write. Any other LD_CONFIG_SRC value is rejected
+#       loud, non-zero — humans edit the vendored example in place (path (c)).
 #   (c) neither                 — copy the vendored example (placeholders the
 #       operator fills in). The SEED never invents household values.
 #
 # Config values are PII (iMessage handles, family names) — never echoed.
-# Returns non-zero on any read/fetch/parse/incomplete failure.
+# Returns non-zero on any read/parse/incomplete failure.
 ld_config_resolve_and_land() {
   local dest="$1" example="$2" dest_dir tmp src_missing dest_missing
   dest_dir=$(dirname "$dest")
@@ -94,19 +96,19 @@ ld_config_resolve_and_land() {
     echo "ld-config landed at $dest from the vendored example." >&2
     return 0
   fi
-  # (b) consume supplied config. Read raw bytes first, JSON-validate, gate,
-  #     then write atomically — so a malformed/incomplete source never lands.
+  # (b) consume supplied config from stdin (`-`). Read raw bytes first,
+  #     JSON-validate, gate, then write atomically — so a malformed/incomplete
+  #     source never lands. Stdin is the ONLY supported supply value; any other
+  #     LD_CONFIG_SRC is rejected loud (humans edit the example in place).
+  if [ "$LD_CONFIG_SRC" != "-" ]; then
+    echo "LD_CONFIG_SRC accepts only '-' (read config from stdin)." >&2
+    echo "Pipe the config via stdin (LD_CONFIG_SRC=-), or unset it and edit" >&2
+    echo "the vendored example in place." >&2
+    return 1
+  fi
   tmp=$(mktemp "$dest_dir/.config.json.XXXXXX")
   trap 'rm -f "$tmp"' RETURN
-  case "$LD_CONFIG_SRC" in
-    -)
-      cat > "$tmp" || { echo "LD_CONFIG_SRC=-: failed to read config from stdin" >&2; return 1; }
-      ;;
-    *)
-      [ -f "$LD_CONFIG_SRC" ] || { echo "LD_CONFIG_SRC: no such file: $LD_CONFIG_SRC" >&2; return 1; }
-      cat "$LD_CONFIG_SRC" > "$tmp" || { echo "LD_CONFIG_SRC: failed to read $LD_CONFIG_SRC" >&2; return 1; }
-      ;;
-  esac
+  cat > "$tmp" || { echo "LD_CONFIG_SRC=-: failed to read config from stdin" >&2; return 1; }
   jq -e . "$tmp" >/dev/null 2>&1 \
     || { echo "LD_CONFIG_SRC: supplied config is not valid JSON — refusing to land a partial config" >&2; return 1; }
   # Gate the SUPPLIED config BEFORE it lands. Field NAMES only — never PII.

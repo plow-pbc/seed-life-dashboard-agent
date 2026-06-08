@@ -119,35 +119,30 @@ SH
   printf '%s:%s' "$bin" "$PATH"
 }
 
-# (b) file source, gate-passing -> lands the EXACT supplied bytes at mode 600.
-d="$(newdir)"; printf '%s' "$GOOD_CFG" > "$d/src.json"
-LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
-[ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ] && [ "$(filemode "$d/ld/config.json")" = "600" ]
-check "LD_CONFIG_SRC=file lands the supplied bytes verbatim at mode 600" "$?"
-
 # (b) stdin source (`-`), gate-passing -> lands the EXACT piped bytes at mode 600.
 d="$(newdir)"
 printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ] && [ "$(filemode "$d/ld/config.json")" = "600" ]
 check "LD_CONFIG_SRC=- lands the piped bytes verbatim at mode 600" "$?"
 
-# (b) invalid JSON -> non-zero, NO file written.
-d="$(newdir)"; printf 'not json{' > "$d/src.json"
+# (b) invalid JSON via stdin -> non-zero, NO file written.
+d="$(newdir)"
+printf 'not json{' | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+rc=$?
+[ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "invalid JSON via stdin exits non-zero and writes nothing" "$?"
+
+# (b) a non-`-` LD_CONFIG_SRC value is rejected loud -> non-zero, NO file
+#     written. Pins the removal of the file-path supply arm (stdin-only).
+d="$(newdir)"; printf '%s' "$GOOD_CFG" > "$d/src.json"
 LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 rc=$?
-[ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "invalid JSON exits non-zero and writes nothing" "$?"
+[ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "non-'-' LD_CONFIG_SRC is rejected non-zero and writes nothing" "$?"
 
-# (b) nonexistent LD_CONFIG_SRC file -> non-zero, NO file written.
+# (b) valid JSON but gate-failing supplied config (via stdin) -> non-zero, NO
+#     file written (so a corrected retry isn't short-circuited by a bad file).
 d="$(newdir)"
-LD_CONFIG_SRC="$d/missing.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
-rc=$?
-[ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "nonexistent LD_CONFIG_SRC exits non-zero and writes nothing" "$?"
-
-# (b) valid JSON but gate-failing supplied config -> non-zero, NO file
-#     written (so a corrected retry isn't short-circuited by a bad file).
-d="$(newdir)"
-printf '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"x@y"}},"calendar":{"sources":[{"account":"a@b"}]}}' > "$d/src.json"
-LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+printf '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"x@y"}},"calendar":{"sources":[{"account":"a@b"}]}}' \
+  | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 rc=$?
 [ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "incomplete supplied config is gated before landing (no write)" "$?"
 
@@ -162,8 +157,7 @@ ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 d="$(newdir)"; mkdir -p "$d/ld"
 existing='{"family":{"owner":{"name":"Operator","imessage":"op@example.com"},"timezone":"America/New_York"},"calendar":{"sources":[{"account":"op@example.com","calendar_id":"primary"}]},"calendar_nudge":{"lookahead_virtual_minutes":15,"lookahead_in_person_minutes":45}}'
 printf '%s' "$existing" > "$d/ld/config.json"
-printf '%s' "$GOOD_CFG" > "$d/src.json"
-LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ "$(cat "$d/ld/config.json")" = "$existing" ]; check "existing gate-passing config is preserved (operator edits canonical)" "$?"
 
 # (a→b) retry path: a first run with no LD_CONFIG_SRC lands the gate-FAILING
@@ -174,8 +168,7 @@ unset LD_CONFIG_SRC
 ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1   # lands placeholder example (gate-failing)
 [ -n "$(ld_config_missing_required "$d/ld/config.json")" ]                  # sanity: landed file fails the gate
 landed_fails=$?
-printf '%s' "$GOOD_CFG" > "$d/src.json"
-LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ "$landed_fails" = "0" ] && [ -z "$(ld_config_missing_required "$d/ld/config.json")" ]
 check "gate-failing landed config is replaced by a corrected LD_CONFIG_SRC retry" "$?"
 
@@ -185,8 +178,7 @@ check "gate-failing landed config is replaced by a corrected LD_CONFIG_SRC retry
 #       file. With LD_CONFIG_SRC set, it must fall through and replace it.
 d="$(newdir)"; mkdir -p "$d/ld"
 printf 'not json{' > "$d/ld/config.json"
-printf '%s' "$GOOD_CFG" > "$d/src.json"
-LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ]
 check "malformed-JSON existing config is replaced by a valid LD_CONFIG_SRC" "$?"
 
