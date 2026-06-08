@@ -189,6 +189,49 @@ out="$(run_verify "$GOOD_CFG")"
 case "$out" in *"OK   v-ld-config"*) check "verify.sh accepts a complete ld-config (shares the gate)" 0 ;;
               *) check "verify.sh accepts a complete ld-config (shares the gate)" 1 ;; esac
 
+# ─────────── the REAL installer gates before any marketplace POST ───────────
+# The unit cases above drive ld_config.sh directly; this one runs the actual
+# ref/install-bundles.sh end-to-end against a fixture HOME so the installer's
+# ORIGINAL false-success bug (POSTing bundles despite an unfilled config) can't
+# silently regress. With a placeholder config landed and NO LD_CONFIG_SRC, the
+# installer must reach its step-6 gate, exit non-zero with "NOT installed.",
+# and NEVER reach the step-7 marketplace POST. We point dev-plowd-port at a
+# closed port so that IF the gate ever wrongly passed, the POST would still
+# fail loudly (no live plowd) rather than mutate anything — but the assertion
+# is that the gate stops it first. Config values are PII — never echoed.
+d="$(newdir)"; hdir="$d/home"
+appsupport="$hdir/Library/Application Support/co.plow.app"
+secrets="$appsupport/agent-runtime/secrets"
+lddir="$appsupport/agent-runtime/runtime/ld"
+relaydir="$hdir/Library/Application Support/seed-life-dashboard-relay"
+mkdir -p "$secrets" "$lddir" "$relaydir"
+printf 'fake-local-token' > "$secrets/plow-local-token"; chmod 600 "$secrets/plow-local-token"
+printf '{"endpoint_url":"https://x.test","dashboard_token":"tok"}' > "$relaydir/state.json"
+chmod 600 "$relaydir/state.json"
+# A closed, never-listening port: the gate must stop the run before any POST,
+# but if it didn't, the connect would fail loudly instead of hitting real plowd.
+printf '9' > "$appsupport/dev-plowd-port"
+# Land a placeholder (gate-FAILING) config — the unfilled-template case the
+# original bug let through.
+printf '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"[OWNER_IMESSAGE]"}},"calendar":{"sources":[]}}' > "$lddir/config.json"
+shim="$d/bin"; mkdir -p "$shim"
+if [ "$(uname -s)" != "Darwin" ]; then
+  cat > "$shim/stat" <<'SH'
+#!/usr/bin/env bash
+# Map BSD `stat -f '%Lp' <f>` (octal mode) to GNU `stat -c '%a' <f>`.
+if [ "$1" = "-f" ] && [ "$2" = "%Lp" ]; then exec /usr/bin/stat -c '%a' "$3"; fi
+exec /usr/bin/stat "$@"
+SH
+  chmod +x "$shim/stat"
+fi
+unset LD_CONFIG_SRC
+inst_out="$(HOME="$hdir" PATH="$shim:$PATH" bash "$HERE/../install-bundles.sh" 2>&1)"; inst_rc=$?
+[ "$inst_rc" != "0" ]; check "install-bundles.sh exits non-zero on a placeholder config (false-success guard)" "$?"
+case "$inst_out" in *"NOT installed."*) check "install-bundles.sh prints 'NOT installed.' for a gated config" 0 ;;
+              *) check "install-bundles.sh prints 'NOT installed.' for a gated config" 1 ;; esac
+case "$inst_out" in *"posted in one"*|*"Agent installed:"*) check "install-bundles.sh attempts NO marketplace POST when gated" 1 ;;
+              *) check "install-bundles.sh attempts NO marketplace POST when gated" 0 ;; esac
+
 # ───────────────────────────── summary ─────────────────────────────
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" = "0" ]

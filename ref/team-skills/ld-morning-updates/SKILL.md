@@ -11,8 +11,10 @@ one short, warm affirmation for the whole family, posted every morning at
 
 **Read `/config/runtime/ld/config.json` before starting** — the shared
 life-dashboard config. This skill uses the `family` section (the owner's
-and partner's message handles) and `morning_updates.review_window_hours`
-(the message review window). (The sibling
+message handle, and the partner's when `family.partner` is present) and
+`morning_updates.review_window_hours`
+(the message review window). `family.partner` is optional — single-parent
+households leave it null/absent; see Parents' recent messages. (The sibling
 `ld-shared/references/config.example.json` is the template for all ld-
 bundles; the live file lives on the per-install `/config` mount.)
 
@@ -82,7 +84,14 @@ calendar text the way a sender wrote it.
 
 ### Parents' recent messages
 
-Do **one** bulk fetch with `plow_imessage_analytics`, scoped in the query
+**Only when `family.partner` is present.** If `family.partner` is null or
+absent (single-parent household), SKIP this entire fetch — there is no
+parents' thread to read — and compose from the calendar and the abstract
+fallback alone (Compose the affirmation steps 1, 2, and 4; the step-3 thread
+mood signal simply has no input).
+
+When a partner is configured, do **one** bulk fetch with
+`plow_imessage_analytics`, scoped in the query
 itself to the parents' thread — the owner's conversation with the other
 parent — over the configured review window. Filtering in SQL (not in
 context) keeps unrelated household messages out of the prompt. For example:
@@ -92,7 +101,7 @@ context) keeps unrelated household messages out of the prompt. For example:
     WHERE sent_at > datetime('now', '-1 day')
       AND is_group = 0
       AND length(trim(text)) >= 5
-      AND counterparty_handle IN (<family.owner + family.partner handles from the config>)
+      AND counterparty_handle IN (<family.owner + family.partner handles from the config — reached only when family.partner is present>)
     ORDER BY sent_at DESC, message_id DESC;
 
 The `messages` view exposes message content as `text` (not `body`). Adjust
