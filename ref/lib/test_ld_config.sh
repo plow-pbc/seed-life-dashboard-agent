@@ -140,6 +140,17 @@ LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXA
 [ "$landed_fails" = "0" ] && [ -z "$(ld_config_missing_required "$d/ld/config.json")" ]
 check "gate-failing landed config is replaced by a corrected LD_CONFIG_SRC retry" "$?"
 
+# (a→b) a MALFORMED-JSON existing dest must NOT be treated as gate-passing: the
+#       gate exits non-zero with empty stdout on bad JSON, so without the exit-
+#       status check the preserve branch would short-circuit and keep the corrupt
+#       file. With LD_CONFIG_SRC set, it must fall through and replace it.
+d="$(newdir)"; mkdir -p "$d/ld"
+printf 'not json{' > "$d/ld/config.json"
+printf '%s' "$GOOD_CFG" > "$d/src.json"
+LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+[ "$(cat "$d/ld/config.json")" = "$GOOD_CFG" ]
+check "malformed-JSON existing config is replaced by a valid LD_CONFIG_SRC" "$?"
+
 # ─────────────── verify.sh consumes the SAME gate as install ───────────────
 # verify.sh sources ld_config.sh and runs ld_config_missing_required at its
 # v-ld-config step, so a gate-passing config must reach "OK   v-ld-config"

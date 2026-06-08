@@ -67,16 +67,20 @@ ld_config_missing_required() {
 # Config values are PII (iMessage handles, family names) — never echoed.
 # Returns non-zero on any read/fetch/parse/incomplete failure.
 ld_config_resolve_and_land() {
-  local dest="$1" example="$2" dest_dir tmp src_missing
+  local dest="$1" example="$2" dest_dir tmp src_missing dest_missing
   dest_dir=$(dirname "$dest")
   mkdir -p "$dest_dir"
   if [ -f "$dest" ]; then
     # (a) preserve a gate-PASSING existing config — operator's edits are
     #     canonical. But a gate-FAILING existing config (e.g. the placeholder
-    #     example landed by a first run with no LD_CONFIG_SRC) must NOT
-    #     short-circuit a corrected supplied config: when LD_CONFIG_SRC is set,
-    #     fall through to consume + atomically replace it via the (b) path.
-    if [ -z "$(ld_config_missing_required "$dest" 2>/dev/null)" ] || [ -z "${LD_CONFIG_SRC:-}" ]; then
+    #     example landed by a first run with no LD_CONFIG_SRC, OR a manually
+    #     corrupted / malformed-JSON file) must NOT short-circuit a corrected
+    #     supplied config: when LD_CONFIG_SRC is set, fall through to consume +
+    #     atomically replace it via the (b) path. The gate must both EXIT 0
+    #     (parsed cleanly) AND emit nothing — a malformed dest makes jq exit
+    #     non-zero with empty stdout, which would otherwise read as "passing."
+    if { dest_missing=$(ld_config_missing_required "$dest" 2>/dev/null) && [ -z "$dest_missing" ]; } \
+       || [ -z "${LD_CONFIG_SRC:-}" ]; then
       return 0
     fi
   fi
