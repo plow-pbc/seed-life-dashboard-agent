@@ -75,6 +75,14 @@ d="$(newdir)"
 printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ -f "$d/ld/config.json" ]; check "LD_CONFIG_SRC=- reads config from stdin" "$?"
 
+# DELIBERATE GAP: the `https://` acquisition branch (the _NoRedirect
+# refusal + error sanitization, probe 4) is NOT exercised here. The fetch
+# path requires a live server, and a hermetic one only reachable over plain
+# `http://` cannot drive the `https://`-only code path without TLS-cert
+# scaffolding that outweighs the value. The redirect-refusal + no-`newurl`/
+# no-raw-exception-in-stderr guarantee is verified by code review, not by
+# `just test`. Treat this branch as UNCOVERED, not as passing.
+
 # (b) invalid JSON -> non-zero, NO file written.
 d="$(newdir)"; printf 'not json{' > "$d/src.json"
 LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
