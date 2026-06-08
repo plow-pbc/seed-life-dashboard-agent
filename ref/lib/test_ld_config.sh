@@ -28,23 +28,36 @@ check() {
   fi
 }
 
-# A complete, gate-passing household config.
-GOOD_CFG='{"family":{"owner":{"name":"Sam","imessage":"sam@example.com"}},
-           "calendar":{"sources":[{"account":"sam@example.com","calendar_id":"primary"}]}}'
+# A complete, gate-passing household config: every field the scheduled bundles
+# throw-on-missing is filled (owner name/imessage, family.timezone, a source
+# with real account+calendar_id, and both calendar_nudge lookaheads).
+GOOD_CFG='{"family":{"owner":{"name":"Sam","imessage":"sam@example.com"},"timezone":"America/Los_Angeles"},
+           "calendar":{"sources":[{"account":"sam@example.com","calendar_id":"primary"}]},
+           "calendar_nudge":{"lookahead_virtual_minutes":30,"lookahead_in_person_minutes":60}}'
 
 newdir() { mktemp -d "${TMPDIR:-/tmp}/ld-test.XXXXXX"; }
 
 # ───────────────────────── gate: required fields ─────────────────────────
 # One parametrized matrix: each row is (label, config-json, expected-substr).
 # expected-substr empty means "gate must pass (emit nothing)".
+# A reusable "everything else filled" prefix so each row varies only the
+# field under test. ${GG} expands to the GOOD_CFG fields EXCEPT calendar, which
+# each row appends so it can vary the sources.
+GG='"family":{"owner":{"name":"Sam","imessage":"x@y"},"timezone":"America/Los_Angeles"},"calendar_nudge":{"lookahead_virtual_minutes":30,"lookahead_in_person_minutes":60}'
 gate_cases=(
   "all required present -> passes|$GOOD_CFG|"
-  "placeholder owner.name rejected|{\"family\":{\"owner\":{\"name\":\"[OWNER_NAME]\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|family.owner.name"
-  "placeholder owner.imessage rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"[OWNER_IMESSAGE]\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|family.owner.imessage"
-  "empty account rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"\"}]}}|calendar.sources[].account"
-  "placeholder account among real rows rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\"},{\"account\":\"[CALENDAR_ACCOUNT_2]\"}]}}|calendar.sources[].account"
-  "zero calendar sources rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[]}}|calendar.sources (need at least one"
-  "optional placeholders (partner/people/long_lead) allowed|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":{\"name\":\"[PARTNER_NAME]\"},\"people\":[\"[FAMILY_PERSON_1]\"]},\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]},\"weekly_digest\":{\"long_lead\":[{\"type\":\"[LONG_LEAD_TYPE]\"}]}}|"
+  "minimal complete (GG prefix + one real source) -> passes|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|"
+  "placeholder owner.name rejected|{\"family\":{\"owner\":{\"name\":\"[OWNER_NAME]\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.name"
+  "placeholder owner.imessage rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"[OWNER_IMESSAGE]\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.imessage"
+  "missing family.timezone rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.timezone"
+  "empty account rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"\",\"calendar_id\":\"primary\"}]}}|calendar.sources[].account"
+  "placeholder account among real rows rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"},{\"account\":\"[CALENDAR_ACCOUNT_2]\",\"calendar_id\":\"primary\"}]}}|calendar.sources[].account"
+  "missing calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|calendar.sources[].calendar_id"
+  "placeholder calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"[FAMILY_CALENDAR_ID]\"}]}}|calendar.sources[].calendar_id"
+  "zero calendar sources rejected|{$GG,\"calendar\":{\"sources\":[]}}|calendar.sources (need at least one"
+  "missing lookahead_virtual_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_virtual_minutes"
+  "non-numeric lookahead_in_person_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":\"60\"},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_in_person_minutes"
+  "optional placeholders (partner/people/long_lead) allowed|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\",\"partner\":{\"name\":\"[PARTNER_NAME]\"},\"people\":[\"[FAMILY_PERSON_1]\"]},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[{\"type\":\"[LONG_LEAD_TYPE]\"}]}}|"
 )
 for row in "${gate_cases[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
@@ -74,14 +87,6 @@ LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXA
 d="$(newdir)"
 printf '%s' "$GOOD_CFG" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ -f "$d/ld/config.json" ]; check "LD_CONFIG_SRC=- reads config from stdin" "$?"
-
-# DELIBERATE GAP: the `https://` acquisition branch (the _NoRedirect
-# refusal + error sanitization, probe 4) is NOT exercised here. The fetch
-# path requires a live server, and a hermetic one only reachable over plain
-# `http://` cannot drive the `https://`-only code path without TLS-cert
-# scaffolding that outweighs the value. The redirect-refusal + no-`newurl`/
-# no-raw-exception-in-stderr guarantee is verified by code review, not by
-# `just test`. Treat this branch as UNCOVERED, not as passing.
 
 # (b) invalid JSON -> non-zero, NO file written.
 d="$(newdir)"; printf 'not json{' > "$d/src.json"

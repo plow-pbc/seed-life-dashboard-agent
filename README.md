@@ -30,16 +30,15 @@ You can supply a complete config via the **`LD_CONFIG_SRC`** environment variabl
 
 - a **file path** — `LD_CONFIG_SRC=/path/to/config.json`
 - `-` to read from **stdin** — `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
-- an **`https://` URL** — `LD_CONFIG_SRC=https://example.com/config.json`
 
-The supplied bytes are validated as JSON and written atomically. Invalid JSON or a non-200 URL fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
+The supplied bytes are validated as JSON, run through the required-field gate, and written atomically. Invalid JSON or an incomplete config fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
 
 ### Required vs optional fields
 
 The install/verify gate blocks **only** on the fields the bundles cannot run without:
 
-- **Required** — `family.owner.name`, `family.owner.imessage`, and at least one `calendar.sources` row, where **every** present row has a real (non-empty, non-placeholder) `account` (each source is fetched at runtime, so an empty/placeholder account would be a bogus fetch target).
-- **Optional** — partner (`[PARTNER_*]`), additional people (`[FAMILY_PERSON_*]`), extra calendars (`[FAMILY_CALENDAR_ID]`), and long-lead type (`[LONG_LEAD_TYPE]`) may be left as placeholders or empty. `family.timezone` ships a real default.
+- **Required** (exactly the fields the scheduled bundles throw on at their first tick) — `family.owner.name`, `family.owner.imessage`, `family.timezone`, `calendar_nudge.lookahead_virtual_minutes` + `calendar_nudge.lookahead_in_person_minutes` (both numbers), and at least one `calendar.sources` row, where **every** present row has a real (non-empty, non-placeholder) `account` **and** `calendar_id` (each source is fetched at runtime, so an empty/placeholder value would be a bogus fetch target). `family.timezone` and the lookaheads ship real defaults in the vendored example, so a hand-edited install passes them for free — they only need real values in a supplied (`LD_CONFIG_SRC`) config that overrides them.
+- **Optional** — partner (`[PARTNER_*]`), additional people (`[FAMILY_PERSON_*]`), and long-lead type (`[LONG_LEAD_TYPE]`) may be left as placeholders or empty.
 
 This lets single-parent / single-calendar households complete an unattended install — only the required fields need real values.
 

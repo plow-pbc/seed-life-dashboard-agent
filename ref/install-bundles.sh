@@ -8,7 +8,7 @@
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
 # the two secret files. The ld-config is landed ONLY on first install
 # (subsequent runs preserve operator edits); it comes from LD_CONFIG_SRC
-# (a file path, `-` for stdin, or an `https://` URL) when set, otherwise
+# (a file path or `-` for stdin) when set, otherwise
 # from the vendored example.
 #
 # The bundle POST is GATED on REQUIRED ld-config fields only — owner
@@ -119,8 +119,8 @@ mv "$TMP" "$SECRETS_DIR/dashboard-token"
 # 6. Land ld-config (resolution + landing contract lives in
 #    ref/lib/ld_config.sh so `just test` covers it). Three ways the file
 #    gets populated, in priority: (a) already present -> preserve; (b)
-#    LD_CONFIG_SRC -> consume a supplied config (file / `-` stdin /
-#    https:// URL), JSON-validated AND required-field-gated BEFORE the
+#    LD_CONFIG_SRC -> consume a supplied config (file / `-` stdin),
+#    JSON-validated AND required-field-gated BEFORE the
 #    atomic mv so nothing bad lands; (c) neither -> copy the vendored
 #    example. Config values are PII — never echoed.
 ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE"
