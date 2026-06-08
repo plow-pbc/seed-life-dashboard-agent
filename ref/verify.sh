@@ -18,22 +18,29 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
-# v1b: ld-config present + parses as JSON + no remaining placeholders.
-# Presence + JSON-parse is the floor; the placeholder check (any
-# string value matching the `[OWNER_*]` / `[FAMILY_*]` / `[YOUR_*]`
-# pattern the example ships with) catches the silent partial-install
-# class where a fresh `cp config.example.json -> config.json` leaves
-# the bundles wired against fictional household data.
+# v1b: ld-config present + parses as JSON + REQUIRED fields resolved.
+# Presence + JSON-parse is the floor; the required-field check mirrors
+# install-bundles.sh's pre-mutation gate EXACTLY — block only on the
+# fields the bundles cannot function without:
+#   - family.owner.name      ([OWNER_NAME])
+#   - family.owner.imessage  ([OWNER_IMESSAGE])
+#   - at least ONE real calendar.sources[].account
+# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
+# [LONG_LEAD_TYPE]) intentionally do NOT block — single-parent /
+# single-calendar homes leave them as-is.
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-# Generic `[UPPER_SNAKE]` placeholder detector — matches the same
-# pattern install-bundles.sh's pre-mutation gate uses. Catches
-# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
-# [FAMILY_TIMEZONE], [YOUR_*], etc. — anything that survives the
-# bot-flagged "specific-token list" shape.
-PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
-if [ "$PLACEHOLDERS" != "0" ]; then
-  echo "FAIL v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) — edit the file with your household's real values and re-run the install before verifying." >&2
+PH='test("\\[[A-Z][A-Z0-9_]*\\]")'
+MISSING=$(jq -r "
+  [ (if (.family.owner.name      // \"\" | $PH) then \"family.owner.name\"      else empty end),
+    (if (.family.owner.imessage  // \"\" | $PH) then \"family.owner.imessage\"  else empty end),
+    (if ([ .calendar.sources[]?.account // \"\" | select($PH | not) ] | length) == 0
+       then \"calendar.sources[].account (need at least one real account)\" else empty end)
+  ] | .[]" "$LD_CONFIG")
+if [ -n "$MISSING" ]; then
+  echo "FAIL v-ld-config: $LD_CONFIG is missing required household values:" >&2
+  echo "$MISSING" | sed 's/^/  - /' >&2
+  echo "Fill these in (or re-run install with LD_CONFIG_SRC) before verifying." >&2
   exit 1
 fi
 echo "OK   v-ld-config"

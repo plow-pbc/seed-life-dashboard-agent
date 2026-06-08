@@ -22,6 +22,27 @@ Tell any AI agent:
 
 The umbrella [`seed-life-dashboard`](https://github.com/plow-pbc/seed-life-dashboard) installs this SEED + its dependencies (`seed-plow-app`, `seed-life-dashboard-relay`) in one shot.
 
+## Household config (`ld-config`)
+
+On first install the SEED lands a household config at `~/Library/Application Support/co.plow.app/agent-runtime/runtime/ld/config.json` (mode 600). Re-runs preserve operator edits.
+
+You can supply a complete config via the **`LD_CONFIG_SRC`** environment variable, set to:
+
+- a **file path** — `LD_CONFIG_SRC=/path/to/config.json`
+- `-` to read from **stdin** — `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
+- an **`https://` URL** — `LD_CONFIG_SRC=https://example.com/config.json`
+
+The supplied bytes are validated as JSON and written atomically. Invalid JSON or a non-200 URL fails loud with a non-zero exit (no partial config is ever written). When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
+
+### Required vs optional fields
+
+The install/verify gate blocks **only** on the fields the bundles cannot run without:
+
+- **Required** — `family.owner.name`, `family.owner.imessage`, and at least one real `calendar.sources[].account`.
+- **Optional** — partner (`[PARTNER_*]`), additional people (`[FAMILY_PERSON_*]`), extra calendars (`[FAMILY_CALENDAR_ID]`), and long-lead type (`[LONG_LEAD_TYPE]`) may be left as placeholders or empty. `family.timezone` ships a real default.
+
+This lets single-parent / single-calendar households complete an unattended install — only the required fields need real values.
+
 ## License
 
 MIT

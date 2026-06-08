@@ -6,9 +6,16 @@
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
-# the two secret files. The ld-config is copied from the vendored
-# example ONLY on first install; subsequent runs preserve operator
-# edits.
+# the two secret files. The ld-config is landed ONLY on first install
+# (subsequent runs preserve operator edits); it comes from LD_CONFIG_SRC
+# (a file path, `-` for stdin, or an `https://` URL) when set, otherwise
+# from the vendored example.
+#
+# The bundle POST is GATED on REQUIRED ld-config fields only — owner
+# name + imessage + at least one real calendar account. Optional fields
+# (partner, extra people/calendars, long-lead type) may stay as
+# placeholders so single-parent / single-calendar homes install
+# unattended. A remaining required placeholder is a hard NON-ZERO stop.
 #
 # Relay-state validation + ld-config write happen BEFORE the bundle
 # POST so that no scheduled code is activated until the runtime
@@ -107,42 +114,112 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Land ld-config from the vendored example ONLY if not already
-#    present — never overwrite operator edits. The example contains
-#    `[UPPER_SNAKE]` placeholders the operator must replace; the SEED
-#    convention forbids the install from inventing household values.
+# 6. Land ld-config. Three ways the file gets populated, in priority:
 #
-# Contract: placeholder config means "install not yet complete." If
-# placeholders are still present (either because we just copied the
-# example, or because the operator's prior pass exited without
-# editing), this install does NOT POST bundles — it surfaces the
-# next step and exits 0 (re-run after editing). Activating scheduled
-# code against `[OWNER_NAME]` / `[FAMILY_TIMEZONE]` / `[CALENDAR_*]`
-# placeholders would land bundles that fail at the first scheduled
-# tick — that's the silent-partial-install class this gate
-# eliminates, and it keeps install / verify / SEED.md aligned on a
-# single definition of "installed."
+#   (a) Already present  — operator's prior edits are canonical; never
+#       overwrite. (re-run safety)
+#   (b) LD_CONFIG_SRC set — consume a supplied household config from a
+#       file path, `-` (stdin), or an `https://` URL. The supplied JSON
+#       is validated well-formed and written atomically (tempfile +
+#       `mv`, mode 600). Invalid JSON or a non-200 URL FAILS LOUD with
+#       a non-zero exit — never a partial write, never a silent no-op.
+#   (c) Neither          — copy the vendored example (placeholders the
+#       operator fills in). The SEED never invents household values.
+#
+# After the file exists, the install gates on REQUIRED placeholders
+# only (owner name + imessage + at least one real calendar account).
+# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
+# [LONG_LEAD_TYPE]) may stay as-is so single-parent / single-calendar
+# homes complete unattended. A remaining REQUIRED placeholder is a hard
+# stop (non-zero) — distinct from a successful install — because the
+# bundles would fail at their first scheduled tick against it.
+#
+# Config values are PII (iMessage handles, family names) — never echoed.
 mkdir -p "$LD_CONFIG_DIR"
-if [ ! -f "$LD_CONFIG" ]; then
+if [ -f "$LD_CONFIG" ]; then
+  : # (a) preserve operator edits
+elif [ -n "${LD_CONFIG_SRC:-}" ]; then
+  # (b) consume supplied config. Read raw bytes first, validate JSON,
+  #     then write atomically — so a malformed source never lands.
+  TMP_CFG=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  trap 'rm -f "$TMP_CFG"' EXIT
+  case "$LD_CONFIG_SRC" in
+    https://*)
+      # Fetch via Python stdlib (same _NoRedirect discipline as the
+      # bundle POST); a non-200 raises HTTPError -> non-zero exit.
+      LD_CONFIG_SRC="$LD_CONFIG_SRC" python3 - > "$TMP_CFG" <<'PY' \
+        || { echo "LD_CONFIG_SRC: failed to fetch config from URL" >&2; exit 1; }
+import os, sys, urllib.error, urllib.request
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"unexpected redirect to {newurl}", headers, fp,
+        )
+
+opener = urllib.request.build_opener(_NoRedirect())
+req = urllib.request.Request(os.environ["LD_CONFIG_SRC"], method="GET")
+try:
+    with opener.open(req, timeout=60) as resp:
+        sys.stdout.buffer.write(resp.read())
+except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+    sys.exit(f"{exc}")
+PY
+      ;;
+    -)
+      cat > "$TMP_CFG" || { echo "LD_CONFIG_SRC=-: failed to read config from stdin" >&2; exit 1; }
+      ;;
+    *)
+      [ -f "$LD_CONFIG_SRC" ] || { echo "LD_CONFIG_SRC: no such file: $LD_CONFIG_SRC" >&2; exit 1; }
+      cat "$LD_CONFIG_SRC" > "$TMP_CFG" || { echo "LD_CONFIG_SRC: failed to read $LD_CONFIG_SRC" >&2; exit 1; }
+      ;;
+  esac
+  jq -e . "$TMP_CFG" >/dev/null 2>&1 \
+    || { echo "LD_CONFIG_SRC: supplied config is not valid JSON — refusing to land a partial config" >&2; exit 1; }
+  chmod 600 "$TMP_CFG"
+  mv "$TMP_CFG" "$LD_CONFIG"
+  trap - EXIT
+  echo "" >&2
+  echo "ld-config landed at $LD_CONFIG from LD_CONFIG_SRC." >&2
+else
+  # (c) first install with no supplied config — copy the example.
   cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
   chmod 600 "$LD_CONFIG"
   echo "" >&2
   echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
 fi
 
-# Generic placeholder detector — any `[UPPER_SNAKE]` string anywhere
-# in the JSON (recursive descent via jq `..`). Specific tokens like
-# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
-# [FAMILY_TIMEZONE], [YOUR_*] all match this one rule.
-PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
-if [ "$PLACEHOLDERS" != "0" ]; then
+# REQUIRED-field placeholder gate. We block ONLY on fields the bundles
+# cannot function without:
+#   - family.owner.name      ([OWNER_NAME])
+#   - family.owner.imessage  ([OWNER_IMESSAGE])
+#   - at least ONE real calendar.sources[].account (block only if EVERY
+#     account is still an [UPPER_SNAKE] placeholder)
+# Optional fields ([PARTNER_*], [FAMILY_PERSON_*], [FAMILY_CALENDAR_ID],
+# [LONG_LEAD_TYPE]) intentionally do NOT block — single-parent /
+# single-calendar households leave them as-is. family.timezone already
+# ships a real default. jq emits the names of unfilled required fields
+# (field NAMES only, never the PII values) for an actionable message.
+PH='test("\\[[A-Z][A-Z0-9_]*\\]")'
+MISSING=$(jq -r "
+  [ (if (.family.owner.name      // \"\" | $PH) then \"family.owner.name\"      else empty end),
+    (if (.family.owner.imessage  // \"\" | $PH) then \"family.owner.imessage\"  else empty end),
+    (if ([ .calendar.sources[]?.account // \"\" | select($PH | not) ] | length) == 0
+       then \"calendar.sources[].account (need at least one real account)\" else empty end)
+  ] | .[]" "$LD_CONFIG")
+if [ -n "$MISSING" ]; then
   echo "" >&2
-  echo "ld-config at $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s)." >&2
-  echo "Edit the file with your household's real values (family names," >&2
-  echo "timezone, calendar account IDs, etc.), then re-run this install." >&2
-  echo "The bundle install is GATED on a fully-resolved config — the" >&2
-  echo "bundles would fail at their first scheduled tick otherwise." >&2
-  exit 0
+  echo "ld-config at $LD_CONFIG is missing REQUIRED household values:" >&2
+  echo "$MISSING" | sed 's/^/  - /' >&2
+  echo "" >&2
+  echo "Fill these in (or supply a complete config via LD_CONFIG_SRC) and" >&2
+  echo "re-run this install. Optional fields (partner, additional people," >&2
+  echo "extra calendars, long-lead type) may be left as placeholders." >&2
+  echo "The bundle install is GATED on the required fields — the bundles" >&2
+  echo "would fail at their first scheduled tick otherwise." >&2
+  echo "NOT installed." >&2
+  exit 1
 fi
 
 # 7. POST ALL bundles in a single tarball + single Python call so
