@@ -16,7 +16,11 @@
 #   - calendar.sources       — at least ONE row (run.js:146), and EVERY present
 #     row must have a non-empty, non-placeholder `account` (run.js:150 — fetched
 #     at the first tick, so a "" or [UPPER_SNAKE] account is a bogus target)
-#     AND a non-empty, non-placeholder `calendar_id` (run.js:150).
+#     AND a non-empty, non-placeholder `calendar_id` (run.js:150). At least ONE
+#     row must also be an OWNER source (`self != false`) — run.js:160 builds the
+#     owner-identity set from `sources.filter(s => s.self !== false)` and throws
+#     (run.js:162) when it is empty, so an all-`self:false` config passes a
+#     sources-only check yet dies on the first tick.
 #   - calendar_nudge.lookahead_virtual_minutes  (run.js:157 throws unless a
 #     finite number) and
 #   - calendar_nudge.lookahead_in_person_minutes (run.js:157, same).
@@ -55,6 +59,8 @@ ld_config_missing_required() {
          then \"calendar.sources[].account (every source needs a real, non-placeholder account)\"
        elif ([ .calendar.sources[] | .calendar_id // \"\" | select(realstr | not) ] | length) > 0
          then \"calendar.sources[].calendar_id (every source needs a real, non-placeholder calendar_id)\"
+       elif ([ .calendar.sources[] | select(.self != false) ] | length) == 0
+         then \"calendar.sources[].self (need at least one owner source with self != false)\"
        else empty end),
       (if (.calendar_nudge.lookahead_virtual_minutes   | finitenum | not) then \"calendar_nudge.lookahead_virtual_minutes\"   else empty end),
       (if (.calendar_nudge.lookahead_in_person_minutes | finitenum | not) then \"calendar_nudge.lookahead_in_person_minutes\" else empty end)
@@ -85,7 +91,14 @@ ld_config_resolve_and_land() {
   dest_dir=$(dirname "$dest")
   mkdir -p "$dest_dir"
   if [ -f "$dest" ]; then
-    return 0  # (a) preserve operator edits
+    # (a) preserve a gate-PASSING existing config — operator's edits are
+    #     canonical. But a gate-FAILING existing config (e.g. the placeholder
+    #     example landed by a first run with no LD_CONFIG_SRC) must NOT
+    #     short-circuit a corrected supplied config: when LD_CONFIG_SRC is set,
+    #     fall through to consume + atomically replace it via the (b) path.
+    if [ -z "$(ld_config_missing_required "$dest" 2>/dev/null)" ] || [ -z "${LD_CONFIG_SRC:-}" ]; then
+      return 0
+    fi
   fi
   if [ -z "${LD_CONFIG_SRC:-}" ]; then
     # (c) first install with no supplied config — copy the example.

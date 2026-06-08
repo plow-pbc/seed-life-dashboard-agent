@@ -55,6 +55,8 @@ gate_cases=(
   "missing calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|calendar.sources[].calendar_id"
   "placeholder calendar_id rejected|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"[FAMILY_CALENDAR_ID]\"}]}}|calendar.sources[].calendar_id"
   "zero calendar sources rejected|{$GG,\"calendar\":{\"sources\":[]}}|calendar.sources (need at least one"
+  "all-self:false sources rejected (no owner identity)|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"self\":false}]}}|calendar.sources[].self"
+  "mixed self:false + one owner source passes|{$GG,\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"self\":false},{\"account\":\"c@d\",\"calendar_id\":\"primary\"}]}}|"
   "missing lookahead_virtual_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_virtual_minutes"
   "non-numeric lookahead_in_person_minutes rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\"},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":\"60\"},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|calendar_nudge.lookahead_in_person_minutes"
   "optional placeholders (partner/people/long_lead) allowed|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"timezone\":\"America/Los_Angeles\",\"partner\":{\"name\":\"[PARTNER_NAME]\"},\"people\":[\"[FAMILY_PERSON_1]\"]},\"calendar_nudge\":{\"lookahead_virtual_minutes\":30,\"lookahead_in_person_minutes\":60},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[{\"type\":\"[LONG_LEAD_TYPE]\"}]}}|"
@@ -108,11 +110,27 @@ unset LD_CONFIG_SRC
 ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
 [ -f "$d/ld/config.json" ]; check "no LD_CONFIG_SRC copies the vendored example" "$?"
 
-# (a) existing config preserved verbatim (re-run safety) even with a source set.
-d="$(newdir)"; mkdir -p "$d/ld"; printf '{"keep":true}' > "$d/ld/config.json"
+# (a) existing GATE-PASSING config preserved verbatim (re-run safety) even with
+#     a source set — the operator's landed edits are canonical, never clobbered.
+d="$(newdir)"; mkdir -p "$d/ld"
+existing='{"family":{"owner":{"name":"Operator","imessage":"op@example.com"},"timezone":"America/New_York"},"calendar":{"sources":[{"account":"op@example.com","calendar_id":"primary"}]},"calendar_nudge":{"lookahead_virtual_minutes":15,"lookahead_in_person_minutes":45}}'
+printf '%s' "$existing" > "$d/ld/config.json"
 printf '%s' "$GOOD_CFG" > "$d/src.json"
 LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
-[ "$(cat "$d/ld/config.json")" = '{"keep":true}' ]; check "existing config is preserved (operator edits canonical)" "$?"
+[ "$(cat "$d/ld/config.json")" = "$existing" ]; check "existing gate-passing config is preserved (operator edits canonical)" "$?"
+
+# (a→b) retry path: a first run with no LD_CONFIG_SRC lands the gate-FAILING
+#       placeholder example; a retry WITH a corrected LD_CONFIG_SRC must consume
+#       it and replace the bad landed file (not short-circuit on its existence).
+d="$(newdir)"
+unset LD_CONFIG_SRC
+ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1   # lands placeholder example (gate-failing)
+[ -n "$(ld_config_missing_required "$d/ld/config.json")" ]                  # sanity: landed file fails the gate
+landed_fails=$?
+printf '%s' "$GOOD_CFG" > "$d/src.json"
+LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+[ "$landed_fails" = "0" ] && [ -z "$(ld_config_missing_required "$d/ld/config.json")" ]
+check "gate-failing landed config is replaced by a corrected LD_CONFIG_SRC retry" "$?"
 
 # ─────────────── verify.sh consumes the SAME gate as install ───────────────
 # verify.sh sources ld_config.sh and runs ld_config_missing_required at its
