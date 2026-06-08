@@ -55,6 +55,14 @@ gate_cases=(
   "empty calendar.sources array rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[]}}|need at least one"
   "missing calendar.sources rejected (null is not an array)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}}}|must be a non-empty array"
   "vendored example with empty optionals -> only owner+account placeholders block|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":null,\"people\":[]},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[]}}|"
+  # The gate DELIBERATELY does not check per-field runtime requirements — these
+  # pin the loosened half so a future re-tightening trips a test. Each is a
+  # config the bundles would later reject at runtime but the install gate passes.
+  "source missing calendar_id -> passes the gate (runtime-deferred)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\"}]}}|"
+  "all-self:false sources -> passes the gate (runtime-deferred)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"self\":false}]}}|"
+  # A real value that merely CONTAINS a bracketed token is NOT a placeholder —
+  # the match is anchored to whole-string placeholders only.
+  "value containing a bracketed token is not a placeholder -> passes|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"name\":\"Work [TEAM]\"}]}}|"
 )
 for row in "${gate_cases[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"

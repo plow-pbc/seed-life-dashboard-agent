@@ -36,9 +36,12 @@ ld_config_missing_required() {
        elif (.calendar.sources | length) == 0
          then "calendar.sources (need at least one calendar source)"
        else empty end),
-      # Any [UPPER_SNAKE] placeholder anywhere in the config means the operator
-      # left a required field unedited. Walk every string leaf via `..`.
-      (if [ .. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]")) ] | length > 0
+      # A string leaf that is EXACTLY an [UPPER_SNAKE] placeholder means the
+      # operator left a required field unedited. Walk every string leaf via `..`
+      # and anchor the match (^...$) so a real value that merely CONTAINS a
+      # bracketed token (e.g. a calendar name "Work [TEAM]") is not a false
+      # positive — the template only ever ships whole-string placeholders.
+      (if [ .. | strings | select(test("^\\[[A-Z][A-Z0-9_]*\\]$")) ] | length > 0
          then "config still contains [UPPER_SNAKE] placeholders (fill them in)"
        else empty end)
     ] | .[]
