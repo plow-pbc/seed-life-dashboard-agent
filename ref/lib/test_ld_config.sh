@@ -86,6 +86,39 @@ out="$(ld_config_missing_required "$EXAMPLE")"
 # Octal mode of a file, portable across GNU (-c %a) and BSD/macOS (-f %Lp) stat.
 filemode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 
+# Build a deterministic PATH for running the REAL verify.sh / install-bundles.sh
+# against a fixture HOME, so these integration tests pass in ANY environment
+# (clean CI containers included) instead of only on a dev host that happens to
+# have every host tool installed. Prints the PATH to use.
+#
+# The fixture <dir>/bin is PREPENDED to the real PATH (not a replacement) so the
+# real `jq` and coreutils stay reachable — `jq` is actually USED (it parses
+# relay-state + the ld-config and detects placeholders), so it must be
+# functional, not a stub. We add two kinds of fixture entries:
+#   1. a `stat` shim that maps BSD `stat -f '%Lp'` (the mode-600 check both
+#      scripts run, macOS-shaped) to GNU `stat -c '%a'`, on non-Darwin hosts;
+#   2. empty stubs for the tools install-bundles.sh only `command -v`-checks at
+#      its preflight but never executes before the ld-config gate the test
+#      exercises (tar/lsof/pgrep/python3/awk) — so the preflight passes even on
+#      a host where those aren't installed.
+fixture_path() {  # fixture_path <dir> -> prints PATH with fixture bin prepended
+  local bin="$1/bin" t
+  mkdir -p "$bin"
+  for t in tar lsof pgrep python3 awk; do
+    command -v "$t" >/dev/null 2>&1 || { printf '#!/bin/sh\n' > "$bin/$t"; chmod +x "$bin/$t"; }
+  done
+  if [ "$(uname -s)" != "Darwin" ]; then
+    cat > "$bin/stat" <<'SH'
+#!/usr/bin/env bash
+# Map BSD `stat -f '%Lp' <f>` (octal mode) to GNU `stat -c '%a' <f>`.
+if [ "$1" = "-f" ] && [ "$2" = "%Lp" ]; then exec /usr/bin/stat -c '%a' "$3"; fi
+exec /usr/bin/stat "$@"
+SH
+    chmod +x "$bin/stat"
+  fi
+  printf '%s:%s' "$bin" "$PATH"
+}
+
 # (b) file source, gate-passing -> lands the EXACT supplied bytes at mode 600.
 d="$(newdir)"; printf '%s' "$GOOD_CFG" > "$d/src.json"
 LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
@@ -160,7 +193,7 @@ check "malformed-JSON existing config is replaced by a valid LD_CONFIG_SRC" "$?"
 # a tiny `stat` wrapper onto PATH that maps `-f '%Lp'` to GNU `stat -c '%a'`
 # so the run reaches v-ld-config — the step this test actually exercises.
 run_verify() {  # run_verify <config-json> -> prints verify.sh output
-  local cfg="$1" d secrets lddir shim
+  local cfg="$1" d secrets lddir
   d="$(newdir)"
   secrets="$d/home/Library/Application Support/co.plow.app/agent-runtime/secrets"
   lddir="$d/home/Library/Application Support/co.plow.app/agent-runtime/runtime/ld"
@@ -168,17 +201,7 @@ run_verify() {  # run_verify <config-json> -> prints verify.sh output
   printf 'https://x.test/api/message' > "$secrets/dashboard-endpoint-url"; chmod 600 "$secrets/dashboard-endpoint-url"
   printf 'tok' > "$secrets/dashboard-token"; chmod 600 "$secrets/dashboard-token"
   printf '%s' "$cfg" > "$lddir/config.json"
-  shim="$d/bin"; mkdir -p "$shim"
-  if [ "$(uname -s)" != "Darwin" ]; then
-    cat > "$shim/stat" <<'SH'
-#!/usr/bin/env bash
-# Map BSD `stat -f '%Lp' <f>` (octal mode) to GNU `stat -c '%a' <f>`.
-if [ "$1" = "-f" ] && [ "$2" = "%Lp" ]; then exec /usr/bin/stat -c '%a' "$3"; fi
-exec /usr/bin/stat "$@"
-SH
-    chmod +x "$shim/stat"
-  fi
-  HOME="$d/home" PATH="$shim:$PATH" bash "$HERE/../verify.sh" 2>&1
+  HOME="$d/home" PATH="$(fixture_path "$d")" bash "$HERE/../verify.sh" 2>&1
 }
 
 out="$(run_verify '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"[OWNER_IMESSAGE]"}},"calendar":{"sources":[]}}')"
@@ -214,18 +237,8 @@ printf '9' > "$appsupport/dev-plowd-port"
 # Land a placeholder (gate-FAILING) config — the unfilled-template case the
 # original bug let through.
 printf '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"[OWNER_IMESSAGE]"}},"calendar":{"sources":[]}}' > "$lddir/config.json"
-shim="$d/bin"; mkdir -p "$shim"
-if [ "$(uname -s)" != "Darwin" ]; then
-  cat > "$shim/stat" <<'SH'
-#!/usr/bin/env bash
-# Map BSD `stat -f '%Lp' <f>` (octal mode) to GNU `stat -c '%a' <f>`.
-if [ "$1" = "-f" ] && [ "$2" = "%Lp" ]; then exec /usr/bin/stat -c '%a' "$3"; fi
-exec /usr/bin/stat "$@"
-SH
-  chmod +x "$shim/stat"
-fi
 unset LD_CONFIG_SRC
-inst_out="$(HOME="$hdir" PATH="$shim:$PATH" bash "$HERE/../install-bundles.sh" 2>&1)"; inst_rc=$?
+inst_out="$(HOME="$hdir" PATH="$(fixture_path "$d")" bash "$HERE/../install-bundles.sh" 2>&1)"; inst_rc=$?
 [ "$inst_rc" != "0" ]; check "install-bundles.sh exits non-zero on a placeholder config (false-success guard)" "$?"
 case "$inst_out" in *"NOT installed."*) check "install-bundles.sh prints 'NOT installed.' for a gated config" 0 ;;
               *) check "install-bundles.sh prints 'NOT installed.' for a gated config" 1 ;; esac
