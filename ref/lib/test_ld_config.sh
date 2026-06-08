@@ -137,6 +137,12 @@ LD_CONFIG_SRC="$d/src.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXA
 rc=$?
 [ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "invalid JSON exits non-zero and writes nothing" "$?"
 
+# (b) nonexistent LD_CONFIG_SRC file -> non-zero, NO file written.
+d="$(newdir)"
+LD_CONFIG_SRC="$d/missing.json" ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" >/dev/null 2>&1
+rc=$?
+[ "$rc" != "0" ] && [ ! -f "$d/ld/config.json" ]; check "nonexistent LD_CONFIG_SRC exits non-zero and writes nothing" "$?"
+
 # (b) valid JSON but gate-failing supplied config -> non-zero, NO file
 #     written (so a corrected retry isn't short-circuited by a bad file).
 d="$(newdir)"
