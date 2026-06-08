@@ -54,7 +54,7 @@ gate_cases=(
   "non-array calendar.sources rejected (object-valued)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":{\"account\":\"a@b\",\"calendar_id\":\"primary\"}}}|must be a non-empty array"
   "empty calendar.sources array rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[]}}|need at least one"
   "missing calendar.sources rejected (null is not an array)|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}}}|must be a non-empty array"
-  "vendored example with empty optionals -> only owner+account placeholders block|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":null,\"people\":[]},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[]}}|"
+  "vendored example with empty optionals -> only owner+account placeholders block|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"},\"partner\":null},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]},\"weekly_digest\":{\"long_lead\":[]}}|"
   # The gate DELIBERATELY does not check per-field runtime requirements — these
   # pin the loosened half so a future re-tightening trips a test. Each is a
   # config the bundles would later reject at runtime but the install gate passes.
@@ -204,9 +204,13 @@ run_verify() {  # run_verify <config-json> -> prints verify.sh output
   HOME="$d/home" PATH="$(fixture_path "$d")" bash "$HERE/../verify.sh" 2>&1
 }
 
-out="$(run_verify '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"[OWNER_IMESSAGE]"}},"calendar":{"sources":[]}}')"
+out="$(run_verify '{"family":{"owner":{"name":"[OWNER_NAME]","imessage":"[OWNER_IMESSAGE]"}},"calendar":{"sources":[]}}')"; rc=$?
 case "$out" in *"OK   v-ld-config"*) check "verify.sh rejects an incomplete ld-config (shares the gate)" 1 ;;
               *) check "verify.sh rejects an incomplete ld-config (shares the gate)" 0 ;; esac
+# The non-zero exit is the operator/CI contract verify.sh promises on a failed
+# gate — assert it, not just the absent OK line, so a regression to exit 0
+# (the original false-success bug) fails here too.
+check "verify.sh exits non-zero on an incomplete ld-config" "$([ "$rc" -ne 0 ] && echo 0 || echo 1)"
 
 out="$(run_verify "$GOOD_CFG")"
 case "$out" in *"OK   v-ld-config"*) check "verify.sh accepts a complete ld-config (shares the gate)" 0 ;;

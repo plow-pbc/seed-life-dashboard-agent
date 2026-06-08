@@ -139,7 +139,7 @@ if [ -n "$MISSING" ]; then
   echo "Fill in the [UPPER_SNAKE] placeholders (owner identity + at least one" >&2
   echo "calendar account) and ensure calendar.sources is a non-empty array," >&2
   echo "then re-run this install (or supply a complete config via LD_CONFIG_SRC)." >&2
-  echo "Optional sections (partner, additional people, extra calendars," >&2
+  echo "Optional sections (partner, extra calendars," >&2
   echo "long-lead type) may be left empty. Per-field requirements are enforced" >&2
   echo "at runtime by each bundle." >&2
   echo "NOT installed." >&2

@@ -2,7 +2,6 @@
   "family": {
     "owner": { "name": "[OWNER_NAME]", "imessage": "[OWNER_IMESSAGE]" },
     "partner": null,
-    "people": [],
     "timezone": "America/Los_Angeles"
   },
   "calendar": {
