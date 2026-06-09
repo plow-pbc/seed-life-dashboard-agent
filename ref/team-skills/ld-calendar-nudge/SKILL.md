@@ -359,14 +359,11 @@ bit-for-bit in `scheduled/filter.js` + `scheduled/compose.js`), and posts
 to the kiosk + iMessage only when ≥1 event qualifies.
 
 **It activates by installation, not a flag.** The script reaches the
-runner's `/scheduled` mount only when this bundle is installed:
-
-```
-just sync-team-skills ld-calendar-nudge ld-shared
-```
-
-That copies `scheduled/` into the plowd-owned `/scheduled` mount and the
-runner picks it up on its next tick. Uninstalling the bundle removes the
+runner's `/scheduled` mount only when this bundle is installed — i.e. when
+this SEED's install POSTs the `ld-calendar-nudge` (and `ld-shared`) bundle
+to plowd's `install-local-bundles` endpoint. That lands `scheduled/` into
+the plowd-owned `/scheduled` mount and the runner picks it up on its next
+tick. Uninstalling the bundle removes the
 script and stops the nudges — there is no `enabled` flag to toggle, and
 the runner ships inert (it does nothing until a bundle populates
 `/scheduled`). Most Plow installs never install this bundle, so the

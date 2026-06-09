@@ -5,7 +5,8 @@
 //
 // This is opt-in (d) code: it ships in the ld-calendar-nudge bundle and is
 // installed into the read-only /scheduled mount only when a household runs
-// `just sync-team-skills ld-calendar-nudge`. It does NOT ship with Plow.
+// this SEED's install (which POSTs the bundle to plowd's
+// install-local-bundles endpoint). It does NOT ship with Plow.
 //
 // SELF-GATING: the runner ticks every ~5 min, but the nudge cadence is
 // :20 / :50 (10 min before each hour and half-hour). This script gates
