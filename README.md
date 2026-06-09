@@ -24,22 +24,28 @@ The umbrella [`seed-life-dashboard`](https://github.com/plow-pbc/seed-life-dashb
 
 ## Household config (`ld-config`)
 
-On first install the SEED lands a household config at `~/Library/Application Support/co.plow.app/agent-runtime/runtime/ld/config.json` (mode 600). Re-runs preserve operator edits.
+On first install the SEED lands a household config at `~/Library/Application Support/co.plow.app/agent-runtime/runtime/ld/config.json` (mode 600). Re-runs preserve a gate-passing operator-edited file.
 
-For unattended/autonomous installs, pipe a complete config via the **`LD_CONFIG_SRC`** environment variable, set to **`-` (stdin) only**:
+The SEED **assembles** this config from three operator inputs it declares as `kind: input` requirements (the installer collects them once up front and exports them; see SEED.md `### Requirements`):
 
-- `cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`
+- `LD_OWNER_NAME` — household owner's display name.
+- `LD_OWNER_IMESSAGE` — owner's iMessage handle (E.164 phone `+15551234567`, or an email).
+- `LD_CALENDAR_ACCOUNT` — account that owns the primary calendar.
 
-The supplied bytes are validated as JSON, run through the minimal install gate, and written atomically. Invalid JSON or a config that fails the gate fails loud with a non-zero exit (no partial config is ever written); any other `LD_CONFIG_SRC` value is rejected loud. When `LD_CONFIG_SRC` is unset, the SEED copies the vendored example for you to edit by hand.
+`family.timezone` is **autodetected** from the host (`readlink /etc/localtime` → IANA zone, fallback `America/Los_Angeles`), so a non-Pacific household gets the right local time without a fourth question. Assembly uses `jq` with the PII values fed in as stdin data (never argv); the assembled config is gate-checked before the atomic write — a blank/incomplete input fails loud, non-zero, with nothing landed.
+
+Two other supply paths: when the inputs are unset, `LD_CONFIG_SRC=-` consumes a complete config from stdin (`cat config.json | LD_CONFIG_SRC=- ref/install-bundles.sh`) — an escape hatch for a caller that has already assembled a full config; any non-`-` value is rejected loud. With neither set, the SEED copies the vendored example for you to edit by hand.
 
 ### The install gate
 
-The install/verify gate is deliberately **minimal**. It checks two structural invariants that distinguish an unedited template from a filled config:
+The install/verify gate is deliberately **minimal**. It checks the invariants that distinguish a usable filled config from an unedited template or a blank-filled one:
 
-- **`calendar.sources` is a non-empty array** — the bundles iterate it at runtime, so an object-valued or empty sources is unusable.
-- **No string value is left as a bare `[UPPER_SNAKE]` placeholder** (a real value that merely contains a bracketed token, e.g. a calendar named "Work [TEAM]", is fine) — the vendored example ships placeholders **only** for the fields the operator must provide (owner identity — `[OWNER_NAME]`, `[OWNER_IMESSAGE]` — and at least one calendar `[CALENDAR_ACCOUNT]`), with real defaults for `family.timezone` and the `calendar_nudge` lookaheads and empty/omitted optional sections (partner, extra calendars, long-lead). So "no bare placeholder left" is exactly "every required field was filled" — and single-parent / single-calendar households pass without editing optional fields.
+- **`calendar.sources` is a non-empty array** with each source's **`account` non-blank** — the bundles iterate it at runtime, so an object-valued, empty, or blank-account sources is unusable.
+- **`family.owner.{name,imessage}` are non-blank** (a whitespace-only value is rejected, not just empty/missing).
+- **`family.timezone` equals the host-autodetected zone** — the single detection rule in `ref/lib/detect-timezone.sh` is shared by assembly (which writes it) and the gate (which asserts it), so a tz regression can't ship a wrong zone that still passes.
+- **No string value is left as a bare `[UPPER_SNAKE]` placeholder** (a real value that merely contains a bracketed token, e.g. a calendar named "Work [TEAM]", is fine) — the vendored example ships placeholders **only** for the fields the operator must provide (owner identity — `[OWNER_NAME]`, `[OWNER_IMESSAGE]` — and at least one calendar `[CALENDAR_ACCOUNT]`), so for a hand-edited example "no bare placeholder left" is exactly "every required field was filled."
 
-Per-field requirements (a finite lookahead, a non-`self:false` owner source, every source carrying a real `account`/`calendar_id`) are **enforced at runtime by each bundle**, which is the single source of truth for them — the install gate intentionally does not duplicate that list.
+Per-field requirements (a finite lookahead, a non-`self:false` owner source, every source carrying a real `calendar_id`) are **enforced at runtime by each bundle**, which is the single source of truth for them — the install gate intentionally does not duplicate that list.
 
 ## License
 
