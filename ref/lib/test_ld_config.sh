@@ -15,7 +15,13 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$HERE/ld_config.sh"
+. "$HERE/detect-timezone.sh"
 EXAMPLE="$HERE/../team-skills/ld-shared/references/config.example.json"
+# The zone install/verify autodetect on THIS host. The real install-bundles.sh
+# and verify.sh pass it to the gate, so the integration fixtures below must
+# carry it (a config landed with a different zone would fail the tz check) —
+# keeping these tests hermetic across hosts regardless of /etc/localtime.
+HOST_TZ="$(ld_detect_timezone)"
 
 passed=0
 failed=0
@@ -63,6 +69,12 @@ gate_cases=(
   # A real value that merely CONTAINS a bracketed token is NOT a placeholder —
   # the match is anchored to whole-string placeholders only.
   "value containing a bracketed token is not a placeholder -> passes|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\",\"name\":\"Work [TEAM]\"}]}}|"
+  # Non-blank owner identity + calendar account — the gate rejects whitespace-
+  # only / missing values, not just empty strings (mirrors the umbrella's
+  # v-config contract for the config this SEED assembles).
+  "blank owner name rejected|{\"family\":{\"owner\":{\"name\":\"  \",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.name"
+  "missing owner imessage rejected|{\"family\":{\"owner\":{\"name\":\"Sam\"}},\"calendar\":{\"sources\":[{\"account\":\"a@b\",\"calendar_id\":\"primary\"}]}}|family.owner.imessage"
+  "blank calendar account rejected|{\"family\":{\"owner\":{\"name\":\"Sam\",\"imessage\":\"x@y\"}},\"calendar\":{\"sources\":[{\"account\":\"   \",\"calendar_id\":\"primary\"}]}}|calendar.sources[].account"
 )
 for row in "${gate_cases[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
@@ -80,6 +92,35 @@ done
 # operator to fill) — proves the example and the gate stay in lockstep.
 out="$(ld_config_missing_required "$EXAMPLE")"
 [ -n "$out" ]; check "vendored example fails the gate (placeholders unfilled)" "$?"
+
+# timezone match: when the caller passes an expected zone (install/verify pass
+# the host-autodetected one), family.timezone MUST equal it — so a tz regression
+# can't ship a wrong local time and still pass. Without the arg the check is
+# skipped (the structural matrix above runs zone-agnostic).
+f="$(newdir)/c.json"; printf '%s' "$GOOD_CFG" > "$f"   # GOOD_CFG zone is America/Los_Angeles
+out="$(ld_config_missing_required "$f" "America/New_York")"
+case "$out" in *"family.timezone"*) check "gate flags a timezone != expected zone" 0 ;; *) check "gate flags a timezone != expected zone" 1 ;; esac
+out="$(ld_config_missing_required "$f" "America/Los_Angeles")"
+[ -z "$out" ]; check "gate passes when family.timezone equals expected zone" "$?"
+
+# ─────────────────────── assembly: ld_config_assemble ───────────────────────
+# The single-shot path: 3 scalar inputs in (owner name/handle, calendar
+# account) + an autodetected zone -> a complete, gate-PASSING household config
+# that mirrors the example shape. PII is fed to jq over stdin, never argv.
+out="$(LD_OWNER_NAME="Sam Odio" LD_OWNER_IMESSAGE="+15551234567" LD_CALENDAR_ACCOUNT="cal@example.com" \
+       ld_config_assemble "$EXAMPLE" "America/New_York")"
+asm="$(newdir)/asm.json"; printf '%s' "$out" > "$asm"
+[ -z "$(ld_config_missing_required "$asm" "America/New_York")" ]
+check "assembled config from inputs passes the gate (incl. tz match)" "$?"
+# The three inputs land where expected; the autodetected zone is used verbatim.
+[ "$(jq -r '.family.owner.name' "$asm")" = "Sam Odio" ] \
+  && [ "$(jq -r '.family.owner.imessage' "$asm")" = "+15551234567" ] \
+  && [ "$(jq -r '.calendar.sources[0].account' "$asm")" = "cal@example.com" ] \
+  && [ "$(jq -r '.family.timezone' "$asm")" = "America/New_York" ]
+check "assembled config places each input + autodetected zone correctly" "$?"
+# A blank/missing input fails loud, non-zero, with no output config.
+out="$(LD_OWNER_NAME="  " LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" ld_config_assemble "$EXAMPLE" "UTC" 2>/dev/null)"; rc=$?
+[ "$rc" != "0" ] && [ -z "$out" ]; check "assembly fails non-zero on a blank input" "$?"
 
 # ──────────────────── landing: resolve_and_land paths ────────────────────
 
@@ -118,6 +159,29 @@ SH
   fi
   printf '%s:%s' "$bin" "$PATH"
 }
+
+# (b-default) inputs in env, no LD_CONFIG_SRC -> ASSEMBLE + land a gate-passing
+#     config at mode 600 with the autodetected zone the caller passes.
+d="$(newdir)"
+unset LD_CONFIG_SRC
+LD_OWNER_NAME="Sam" LD_OWNER_IMESSAGE="+15551234567" LD_CALENDAR_ACCOUNT="cal@example.com" \
+  ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1
+[ -z "$(ld_config_missing_required "$d/ld/config.json" "America/New_York")" ] \
+  && [ "$(filemode "$d/ld/config.json")" = "600" ] \
+  && [ "$(jq -r '.calendar.sources[0].account' "$d/ld/config.json")" = "cal@example.com" ]
+check "inputs in env assemble + land a gate-passing config at mode 600" "$?"
+
+# (a→b-default) a gate-FAILING landed config (placeholder example) must be
+#     REPLACED by a fresh assembly when the inputs are set on a rerun — not
+#     short-circuited on its existence.
+d="$(newdir)"
+unset LD_CONFIG_SRC
+ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1  # lands placeholder (gate-failing)
+[ -n "$(ld_config_missing_required "$d/ld/config.json" "America/New_York")" ]; landed_fails=$?
+LD_OWNER_NAME="Sam" LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" \
+  ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1
+[ "$landed_fails" = "0" ] && [ -z "$(ld_config_missing_required "$d/ld/config.json" "America/New_York")" ]
+check "gate-failing landed config is replaced by a fresh assembly from inputs" "$?"
 
 # (b) stdin source (`-`), gate-passing -> lands the EXACT piped bytes at mode 600.
 d="$(newdir)"
@@ -198,7 +262,9 @@ run_verify() {  # run_verify <config-json> -> prints verify.sh output
   mkdir -p "$secrets" "$lddir"
   printf 'https://x.test/api/message' > "$secrets/dashboard-endpoint-url"; chmod 600 "$secrets/dashboard-endpoint-url"
   printf 'tok' > "$secrets/dashboard-token"; chmod 600 "$secrets/dashboard-token"
-  printf '%s' "$cfg" > "$lddir/config.json"
+  # Stamp the host-autodetected zone into the fixture so a gate-passing config
+  # also passes verify.sh's tz check (it autodetects + asserts the same zone).
+  printf '%s' "$cfg" | jq --arg tz "$HOST_TZ" '.family.timezone = $tz' > "$lddir/config.json"
   HOME="$d/home" PATH="$(fixture_path "$d")" bash "$HERE/../verify.sh" 2>&1
 }
 
