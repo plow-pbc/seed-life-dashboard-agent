@@ -51,23 +51,17 @@ declare -a probes=(
 # Bundle install location varies by plowd build:
 #   - current builds install to ~/Plow/skills/
 #   - v2 container builds use containers/<agent-UUID>/workspace[/host]/skills/
-# Resolve by probing candidate roots for ld-shared's marker file. The agent
-# container in index.json v2 is the entry with role "agent" (the on-disk dir is
-# its lowercased id); `.main` is honored if a build emits it; else first UUID dir.
+# Resolve by probing candidate roots for ld-shared's marker file. The list is
+# built directly — current host root first, then any container workspace via
+# glob — with no index.json/UUID resolver: that resolver's `ls … | grep … |
+# head` could exit non-zero under `set -euo pipefail` on a current build with no
+# containers/ dir and abort BEFORE ~/Plow/skills is ever checked. An unmatched
+# glob stays literal and simply fails the `-f` test, falling through.
 MARKER="${probes[0]}"   # single source of truth for the bundle marker file
-AGENT_UUID=""
-if [ -f "$CONTAINERS_DIR/index.json" ]; then
-  AGENT_UUID=$(jq -r '(.main // (.containers[]? | select(.role=="agent") | .id) // empty)' \
-               "$CONTAINERS_DIR/index.json" 2>/dev/null | head -1 | tr 'A-Z' 'a-z')
-fi
-[ -n "$AGENT_UUID" ] || AGENT_UUID=$(ls "$CONTAINERS_DIR" 2>/dev/null | grep -E '^[0-9a-f-]{36}$' | head -1)
-
-candidates=( "$HOME/Plow/skills" )
-[ -n "$AGENT_UUID" ] && candidates+=( \
-  "$CONTAINERS_DIR/$AGENT_UUID/workspace/skills" \
-  "$CONTAINERS_DIR/$AGENT_UUID/workspace/host/skills" )
 WORKSPACE_SKILLS=""
-for cand in "${candidates[@]}"; do
+for cand in "$HOME/Plow/skills" \
+            "$CONTAINERS_DIR"/*/workspace/skills \
+            "$CONTAINERS_DIR"/*/workspace/host/skills; do
   [ -f "$cand/$MARKER" ] && { WORKSPACE_SKILLS="$cand"; break; }
 done
 [ -n "$WORKSPACE_SKILLS" ] \
