@@ -18,8 +18,9 @@ every ~5-min tick; `run.js` self-gates to one run per hour (top of the hour
 in `family.timezone`). There is **no `cron` registration to set up** —
 installing the bundle is enough.
 
-`run.js` reads `weather.{location,lat,lon}` from
-`/config/runtime/ld/config.json`, resolves the NWS gridpoint, fetches the
+`run.js` reads `weather.{location,lat,lon}` from `/config/runtime/ld/config.json`
+(NWS reports °F for US points — Fahrenheit-only by contract, no units knob),
+resolves the NWS gridpoint, fetches the
 hourly + daily forecast, composes one glanceable line (`compose.js`), and
 posts it to the kiosk as `type: weather`. The kiosk renders the line
 verbatim — no JSON, no parsing. Example:
@@ -44,7 +45,6 @@ runner passes neither and stays gated to the top of the hour.
 `weather` in `/config/runtime/ld/config.json` (template:
 `ld-shared/references/config.example.json`):
 
-    "weather": { "location": "Mountain View", "lat": 37.386, "lon": -122.083, "units": "F" }
+    "weather": { "location": "Mountain View", "lat": 37.386, "lon": -122.083 }
 
-`units` is informational — NWS reports °F for US points. To move the kiosk,
-change `lat` / `lon` / `location`.
+To move the kiosk, change `lat` / `lon` / `location`.

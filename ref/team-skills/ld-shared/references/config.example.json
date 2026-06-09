@@ -34,7 +34,6 @@
   "weather": {
     "location": "Mountain View",
     "lat": 37.386,
-    "lon": -122.083,
-    "units": "F"
+    "lon": -122.083
   }
 }
