@@ -121,6 +121,10 @@ check "assembled config places each input + autodetected zone correctly" "$?"
 # A blank/missing input fails loud, non-zero, with no output config.
 out="$(LD_OWNER_NAME="  " LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" ld_config_assemble "$EXAMPLE" "UTC" 2>/dev/null)"; rc=$?
 [ "$rc" != "0" ] && [ -z "$out" ]; check "assembly fails non-zero on a blank input" "$?"
+# An embedded newline would shift the newline-split indices and silently land a
+# corrupted config — assembly must reject a multi-line value loud, non-zero.
+out="$(LD_OWNER_NAME="$(printf 'Sam\nInjected')" LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" ld_config_assemble "$EXAMPLE" "UTC" 2>/dev/null)"; rc=$?
+[ "$rc" != "0" ] && [ -z "$out" ]; check "assembly rejects an input with an embedded newline (no silent corruption)" "$?"
 
 # ──────────────────── landing: resolve_and_land paths ────────────────────
 
@@ -182,6 +186,30 @@ LD_OWNER_NAME="Sam" LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" \
   ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1
 [ "$landed_fails" = "0" ] && [ -z "$(ld_config_missing_required "$d/ld/config.json" "America/New_York")" ]
 check "gate-failing landed config is replaced by a fresh assembly from inputs" "$?"
+
+# (a) a structurally-valid existing config whose TIMEZONE differs from the
+#     current host zone is PRESERVED, even with inputs set on a rerun — a zone
+#     drift (laptop moved / hand-set zone) must not discard the whole config and
+#     all of the operator's other edits. The preservation gate omits the
+#     tz-match; only a fresh assembly enforces the host zone.
+d="$(newdir)"; mkdir -p "$d/ld"
+drifted='{"family":{"owner":{"name":"Operator","imessage":"op@example.com"},"timezone":"Europe/Berlin"},"calendar":{"sources":[{"account":"op@example.com","calendar_id":"primary"}]}}'
+printf '%s' "$drifted" > "$d/ld/config.json"
+unset LD_CONFIG_SRC
+LD_OWNER_NAME="Sam" LD_OWNER_IMESSAGE="x@y" LD_CALENDAR_ACCOUNT="a@b" \
+  ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1
+[ "$(cat "$d/ld/config.json")" = "$drifted" ]
+check "existing valid config with a drifted timezone is preserved, not reassembled" "$?"
+
+# (b-escape) a config supplied via LD_CONFIG_SRC=- with a NON-host timezone is
+#     accepted — the escape hatch trusts the caller's zone (a remote/headless
+#     caller may supply a config for a different host). The tz-match is enforced
+#     only on the assemble path, not the supplied-config path.
+d="$(newdir)"
+foreign='{"family":{"owner":{"name":"Sam","imessage":"x@y"},"timezone":"Asia/Tokyo"},"calendar":{"sources":[{"account":"a@b","calendar_id":"primary"}]}}'
+printf '%s' "$foreign" | LD_CONFIG_SRC=- ld_config_resolve_and_land "$d/ld/config.json" "$EXAMPLE" "America/New_York" >/dev/null 2>&1
+[ "$(cat "$d/ld/config.json")" = "$foreign" ]
+check "LD_CONFIG_SRC=- accepts a supplied config with a non-host timezone (escape hatch trusts caller)" "$?"
 
 # (b) stdin source (`-`), gate-passing -> lands the EXACT piped bytes at mode 600.
 d="$(newdir)"

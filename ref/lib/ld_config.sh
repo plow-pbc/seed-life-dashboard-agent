@@ -81,10 +81,18 @@ ld_config_assemble() {
       *[![:space:]]*) ;;
       *) echo "ld-config: $v is unset or blank — cannot assemble config" >&2; return 1 ;;
     esac
+    # The values are newline-delimited to jq below; an embedded newline would
+    # shift the split indices and silently land a corrupted config (e.g. drop
+    # the calendar account). Reject a multi-line value loud instead. (The
+    # installer's input collector validates these as single-line non-blank; this
+    # is the defense-in-depth boundary on the assembly side.)
+    case "$val" in
+      *$'\n'*) echo "ld-config: $v must be a single line (no embedded newline)" >&2; return 1 ;;
+    esac
   done
-  # PII in over stdin as a JSON object (jq reads it as the input `.`); the
-  # example shape + non-PII timezone come via --argjson/--arg. The owner handle
-  # and calendar account never touch argv.
+  # PII fed over stdin (newline-delimited); the example shape + non-PII timezone
+  # come via --slurpfile/--arg. The owner handle and calendar account never touch
+  # argv. The values are guaranteed single-line above, so the split is exact.
   printf '%s\n%s\n%s' "$LD_OWNER_NAME" "$LD_OWNER_IMESSAGE" "$LD_CALENDAR_ACCOUNT" \
     | jq -Rsn --arg tz "$tz" --slurpfile example "$example" '
         ( input | rtrimstr("\n") | split("\n") ) as $in |
@@ -136,7 +144,13 @@ ld_config_resolve_and_land() {
     #     replace it. The gate must both EXIT 0 (parsed cleanly) AND emit nothing
     #     — a malformed dest makes jq exit non-zero with empty stdout, which would
     #     otherwise read as "passing."
-    if { dest_missing=$(ld_config_missing_required "$dest" "$want_tz" 2>/dev/null) && [ -z "$dest_missing" ]; } \
+    #     The preservation gate does NOT enforce the tz-match (want_tz omitted):
+    #     a structurally-valid existing config is the operator's canonical edit
+    #     and is preserved even if its zone drifted from the current host (laptop
+    #     moved, /etc/localtime repointed) or was hand-set — we never discard a
+    #     whole config just for the zone. Only a freshly-assembled config (below)
+    #     enforces the host zone.
+    if { dest_missing=$(ld_config_missing_required "$dest" "" 2>/dev/null) && [ -z "$dest_missing" ]; } \
        || { [ -z "$have_inputs" ] && [ -z "${LD_CONFIG_SRC:-}" ]; }; then
       return 0
     fi
@@ -151,6 +165,11 @@ ld_config_resolve_and_land() {
   fi
   tmp=$(mktemp "$dest_dir/.config.json.XXXXXX")
   trap 'rm -f "$tmp"' RETURN
+  # The assemble path enforces the host-autodetected zone (this SEED owns the
+  # zone); the stdin escape hatch TRUSTS the caller's supplied zone (a remote /
+  # headless caller may legitimately supply a config for a different host's
+  # timezone), so its gate runs without the tz-match check.
+  local gate_tz="$want_tz"
   if [ -n "${LD_CONFIG_SRC:-}" ]; then
     # (b-escape) consume a complete config supplied on stdin. Stdin is the ONLY
     #     supported supply value; any other LD_CONFIG_SRC is rejected loud.
@@ -160,6 +179,7 @@ ld_config_resolve_and_land() {
       echo "or unset both and edit the vendored example in place." >&2
       return 1
     fi
+    gate_tz=""
     cat > "$tmp" || { echo "LD_CONFIG_SRC=-: failed to read config from stdin" >&2; return 1; }
     jq -e . "$tmp" >/dev/null 2>&1 \
       || { echo "LD_CONFIG_SRC: supplied config is not valid JSON — refusing to land a partial config" >&2; return 1; }
@@ -169,7 +189,7 @@ ld_config_resolve_and_land() {
       || { echo "ld-config: assembly from operator inputs failed — nothing landed" >&2; return 1; }
   fi
   # Gate the assembled/supplied config BEFORE it lands. Field NAMES only — never PII.
-  src_missing=$(ld_config_missing_required "$tmp" "$want_tz")
+  src_missing=$(ld_config_missing_required "$tmp" "$gate_tz")
   if [ -n "$src_missing" ]; then
     echo "" >&2
     echo "The ld-config to land is missing REQUIRED household values:" >&2

@@ -42,7 +42,7 @@ The install/verify gate is deliberately **minimal**. It checks the invariants th
 
 - **`calendar.sources` is a non-empty array** with each source's **`account` non-blank** — the bundles iterate it at runtime, so an object-valued, empty, or blank-account sources is unusable.
 - **`family.owner.{name,imessage}` are non-blank** (a whitespace-only value is rejected, not just empty/missing).
-- **`family.timezone` equals the host-autodetected zone** — the single detection rule in `ref/lib/detect-timezone.sh` is shared by assembly (which writes it) and the gate (which asserts it), so a tz regression can't ship a wrong zone that still passes.
+- **`family.timezone` equals the host-autodetected zone** — install and verify source the single detection rule in `ref/lib/detect-timezone.sh` once and feed the same zone to assembly (which writes it) and the gate (which asserts it), so a tz regression can't ship a wrong zone that still passes.
 - **No string value is left as a bare `[UPPER_SNAKE]` placeholder** (a real value that merely contains a bracketed token, e.g. a calendar named "Work [TEAM]", is fine) — the vendored example ships placeholders **only** for the fields the operator must provide (owner identity — `[OWNER_NAME]`, `[OWNER_IMESSAGE]` — and at least one calendar `[CALENDAR_ACCOUNT]`), so for a hand-edited example "no bare placeholder left" is exactly "every required field was filled."
 
 Per-field requirements (a finite lookahead, a non-`self:false` owner source, every source carrying a real `calendar_id`) are **enforced at runtime by each bundle**, which is the single source of truth for them — the install gate intentionally does not duplicate that list.
