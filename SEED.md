@@ -30,7 +30,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### `ld-*` bundles
 
-- The five installed bundle directories at `<app_support>/containers/<container-UUID>/workspace/skills/ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest}/`. plowd bind-mounts each container's `workspace/` into the agent VM at `/workspace/`, so the agent reads each bundle at `/workspace/skills/ld-<name>/`.
+- The five installed bundle directories `ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/skills/ld-<name>/`, which is the path the agent reads.
 
 ### Dashboard secrets
 
@@ -74,7 +74,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 1. **Dashboard secrets present.** Do `<app_support>/agent-runtime/secrets/dashboard-endpoint-url` and `dashboard-token` exist with mode `600` and non-zero size? Expected: yes.
 2. **ld-config present, well-formed, and fully resolved.** Does `<app_support>/agent-runtime/runtime/ld/config.json` exist, parse as JSON, AND contain NO `[UPPER_SNAKE]` placeholder values (matched by `\\[[A-Z][A-Z0-9_]*\\]` over the JSON's string values, recursive)? Expected: yes — placeholders are the SEED's single source of truth for "install not yet complete." [ld-config is landed](#ld-config-is-landed) enforces the same gate at install time (refuses to POST bundles while placeholders remain); this verify step is the cross-check that the gate held.
-3. **Bundles installed.** Do all five `SKILL.md` files (or, for `ld-shared`, the `scripts/post_to_kiosk.py` file) exist inside the main agent container's bind-mounted workspace at `<app_support>/containers/<container-UUID>/workspace/skills/ld-*`? Expected: yes.
+3. **Bundles installed.** Do all five `SKILL.md` files (or, for `ld-shared`, the `scripts/post_to_kiosk.py` file) exist under the installed bundle root — resolved across plowd layouts: `~/Plow/skills/ld-*` (current builds), else `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` or `…/workspace/host/skills/ld-*` (v2 container builds), located by the `ld-shared` marker? Expected: yes.
 4. **Endpoint+token are syntactically usable.** Does one of the vendored `post_*.py` wrappers invoked with `--dry-run` produce a redacted-body output line (proving the secrets resolve and the wrapper executes)? Expected: yes.
 
 A deterministic bash implementation lives at [`ref/verify.sh`](ref/verify.sh).
