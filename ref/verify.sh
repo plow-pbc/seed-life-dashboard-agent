@@ -54,7 +54,7 @@ declare -a probes=(
 # Resolve by probing candidate roots for ld-shared's marker file. The agent
 # container in index.json v2 is the entry with role "agent" (the on-disk dir is
 # its lowercased id); `.main` is honored if a build emits it; else first UUID dir.
-MARKER="ld-shared/scripts/post_to_kiosk.py"
+MARKER="${probes[0]}"   # single source of truth for the bundle marker file
 AGENT_UUID=""
 if [ -f "$CONTAINERS_DIR/index.json" ]; then
   AGENT_UUID=$(jq -r '(.main // (.containers[]? | select(.role=="agent") | .id) // empty)' \
@@ -62,12 +62,13 @@ if [ -f "$CONTAINERS_DIR/index.json" ]; then
 fi
 [ -n "$AGENT_UUID" ] || AGENT_UUID=$(ls "$CONTAINERS_DIR" 2>/dev/null | grep -E '^[0-9a-f-]{36}$' | head -1)
 
-WORKSPACE_SKILLS=""
-for cand in \
-  "$HOME/Plow/skills" \
+candidates=( "$HOME/Plow/skills" )
+[ -n "$AGENT_UUID" ] && candidates+=( \
   "$CONTAINERS_DIR/$AGENT_UUID/workspace/skills" \
-  "$CONTAINERS_DIR/$AGENT_UUID/workspace/host/skills"; do
-  [ -n "$cand" ] && [ -f "$cand/$MARKER" ] && { WORKSPACE_SKILLS="$cand"; break; }
+  "$CONTAINERS_DIR/$AGENT_UUID/workspace/host/skills" )
+WORKSPACE_SKILLS=""
+for cand in "${candidates[@]}"; do
+  [ -f "$cand/$MARKER" ] && { WORKSPACE_SKILLS="$cand"; break; }
 done
 [ -n "$WORKSPACE_SKILLS" ] \
   || { echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2; exit 1; }
