@@ -33,7 +33,7 @@ This SEED needs **one** operator-supplied value — the owner's iMessage handle.
 - `family.timezone` — autodetected from `readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`.
 - `calendar.sources[0].account` — defaults to the owner's iMessage handle when that handle is an email; override with `LD_CALENDAR_ACCOUNT`.
 
-Run the following block to assemble + land the household config, land the secrets, and install the bundles. `LD_OWNER_IMESSAGE` MUST be in the environment when it runs (the installer exports it from the preflight answer; a hand-run sets it inline as shown) — on first install the script assembles `ld-config`, deriving the owner name and calendar account when their override vars are unset, and exits non-zero only if the handle is missing. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
+Run the following block to assemble + land the household config, land the secrets, and install the bundles. `LD_OWNER_IMESSAGE` MUST be in the environment when it runs (the installer exports it from the preflight answer; a hand-run sets it inline as shown) — on first install the script assembles `ld-config`, deriving the owner name and calendar account when their override vars are unset, and exits non-zero if the handle is missing or if the handle is a phone and `LD_CALENDAR_ACCOUNT` is unset (no calendar account to derive). The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
 
 ```bash
 set -euo pipefail
