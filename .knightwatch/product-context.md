@@ -14,4 +14,4 @@ Operating point (org default):
 - **Spec rigidity:** the SEED prose IS the contract; a handled edge case the
   spec never asked for is a cost, not a feature.
 
-**This repo's `ref/` payload:** Bash install/verify harness plus vendored `ld-*` team-skill bundles (Python kiosk-POST helpers + Node scheduled-runner code with tests) under `ref/`.
+**This repo's `ref/` payload:** Bash install/verify harness plus the `ld-*` team-skill bundles (Python kiosk-POST helpers + Node scheduled-runner code with tests) under `ref/team-skills/`. This repo is the source-of-truth for those bundles — `ld-*` skill fixes land here.
