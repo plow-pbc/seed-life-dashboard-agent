@@ -30,5 +30,11 @@
   "calendar_nudge": {
     "lookahead_virtual_minutes": 30,
     "lookahead_in_person_minutes": 60
+  },
+  "weather": {
+    "location": "Mountain View",
+    "lat": 37.386,
+    "lon": -122.083,
+    "units": "F"
   }
 }
