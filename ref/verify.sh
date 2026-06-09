@@ -53,19 +53,6 @@ if [ -n "$GATE" ]; then
 fi
 echo "OK   v-ld-config"
 
-# v2: each bundle present in the main agent's container workspace.
-#     "Main agent" container resolution: containers/index.json names
-#     it; fallback is first UUID-shaped dir under containers/.
-if [ -f "$CONTAINERS_DIR/index.json" ] && jq -e '.main' "$CONTAINERS_DIR/index.json" >/dev/null 2>&1; then
-  CONTAINER_UUID=$(jq -r '.main' "$CONTAINERS_DIR/index.json")
-else
-  CONTAINER_UUID=$(ls "$CONTAINERS_DIR" 2>/dev/null \
-                   | grep -E '^[0-9a-f-]{36}$' \
-                   | head -1)
-fi
-[ -n "$CONTAINER_UUID" ] || { echo "FAIL v-bundles: no main agent container under $CONTAINERS_DIR" >&2; exit 1; }
-WORKSPACE_SKILLS="$CONTAINERS_DIR/$CONTAINER_UUID/workspace/skills"
-
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
 # SKILL.md); the other four are full skills with SKILL.md.
 declare -a probes=(
@@ -75,11 +62,31 @@ declare -a probes=(
   "ld-morning-updates/SKILL.md"
   "ld-weekly-digest/SKILL.md"
 )
+
+# Bundle install location varies by plowd build:
+#   - current builds install to ~/Plow/skills/
+#   - v2 container builds use containers/<agent-UUID>/workspace[/host]/skills/
+# Resolve by probing candidate roots for ld-shared's marker file. The list is
+# built directly — current host root first, then any container workspace via
+# glob — with no index.json/UUID resolver: that resolver's `ls … | grep … |
+# head` could exit non-zero under `set -euo pipefail` on a current build with no
+# containers/ dir and abort BEFORE ~/Plow/skills is ever checked. An unmatched
+# glob stays literal and simply fails the `-f` test, falling through.
+MARKER="${probes[0]}"   # single source of truth for the bundle marker file
+WORKSPACE_SKILLS=""
+for cand in "$HOME/Plow/skills" \
+            "$CONTAINERS_DIR"/*/workspace/skills \
+            "$CONTAINERS_DIR"/*/workspace/host/skills; do
+  [ -f "$cand/$MARKER" ] && { WORKSPACE_SKILLS="$cand"; break; }
+done
+[ -n "$WORKSPACE_SKILLS" ] \
+  || { echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2; exit 1; }
+
 for p in "${probes[@]}"; do
   [ -f "$WORKSPACE_SKILLS/$p" ] \
     || { echo "FAIL v-bundles: $WORKSPACE_SKILLS/$p missing" >&2; exit 1; }
 done
-echo "OK   v-bundles ($CONTAINER_UUID)"
+echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 
 # v3: dry-run a wrapper. We use the host-side vendored copy here — same
 # wrapper code that's installed inside the VM, just executed from the
