@@ -48,7 +48,7 @@ GATE=$(jq -r '
 ' "$LD_CONFIG")
 if [ -n "$GATE" ]; then
   echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate: $GATE" >&2
-  echo "Fix the config (or re-run install with the LD_OWNER_* / LD_CALENDAR_ACCOUNT inputs set) before verifying." >&2
+  echo "Fix the config (or re-run install with LD_OWNER_IMESSAGE set — name and calendar account are derived) before verifying." >&2
   exit 1
 fi
 echo "OK   v-ld-config"

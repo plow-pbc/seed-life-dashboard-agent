@@ -6,10 +6,11 @@
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
-# the two secret files. The ld-config is ASSEMBLED from the three
-# operator inputs (LD_OWNER_NAME / LD_OWNER_IMESSAGE /
-# LD_CALENDAR_ACCOUNT) on first install ONLY; subsequent runs preserve
-# a gate-passing operator-edited config.
+# the two secret files. The ld-config is ASSEMBLED on first install ONLY
+# from the one required input (LD_OWNER_IMESSAGE) plus a derived display
+# name and calendar account (overridable via LD_OWNER_NAME /
+# LD_CALENDAR_ACCOUNT); subsequent runs preserve a gate-passing
+# operator-edited config.
 #
 # Relay-state validation + ld-config write happen BEFORE the bundle
 # POST so that no scheduled code is activated until the runtime
@@ -145,16 +146,26 @@ elif [ -n "$(ld_config_gate "$LD_CONFIG")" ]; then
 fi
 
 if [ "$NEED_ASSEMBLE" = "1" ]; then
-  # All three inputs are REQUIRED to assemble — the installer collects
-  # them up front (SEED.md ### Requirements). A missing one fails loud
-  # rather than landing a partial config.
-  for v in LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT; do
-    eval "val=\${$v:-}"
-    case "$val" in
-      *[![:space:]]*) ;;  # contains a non-whitespace char (matches the jq gate's \S)
-      *) echo "$v is unset or blank — the installer must collect the three LD_* inputs before assembling ld-config" >&2; exit 1 ;;
-    esac
-  done
+  # Only the iMessage handle is REQUIRED — the installer collects it up front
+  # (SEED.md ### Requirements). The display name and calendar account are
+  # DERIVED (zero questions), each yielding to an explicit LD_* override.
+  case "${LD_OWNER_IMESSAGE:-}" in
+    *[![:space:]]*) ;;  # non-blank (matches the jq gate's \S)
+    *) echo "LD_OWNER_IMESSAGE is unset or blank — the installer must collect the owner's iMessage handle before assembling ld-config" >&2; exit 1 ;;
+  esac
+  # Derive the display name from the host (id -F → full name; fallback to the
+  # username) unless the operator set LD_OWNER_NAME.
+  : "${LD_OWNER_NAME:=$(id -F 2>/dev/null || true)}"
+  [ -n "${LD_OWNER_NAME:-}" ] || LD_OWNER_NAME="$(id -un)"
+  # Derive the calendar account from the handle when it's an email, unless the
+  # operator set LD_CALENDAR_ACCOUNT.
+  case "$LD_OWNER_IMESSAGE" in
+    *@*) : "${LD_CALENDAR_ACCOUNT:=$LD_OWNER_IMESSAGE}" ;;
+  esac
+  case "${LD_CALENDAR_ACCOUNT:-}" in
+    *[![:space:]]*) ;;
+    *) echo "LD_CALENDAR_ACCOUNT could not be derived (the handle is not an email) — set LD_CALENDAR_ACCOUNT to the account that owns the primary calendar" >&2; exit 1 ;;
+  esac
 
   # Autodetect IANA timezone: everything after the last /zoneinfo/ in
   # readlink /etc/localtime; fall back to America/Los_Angeles. Non-PII,

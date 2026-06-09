@@ -21,19 +21,24 @@ Software:
 
 ### Requirements
 
-This SEED's three operator-supplied values — the household facts it [assembles `config.json` from](#ld-config). All are `kind: input`, `phase: preflight` (collectible before install); the env-var name lives in `satisfy`. The installer unions all preflight inputs across the dependency tree and asks them ONCE up front — this SEED only DECLARES them, it does not collect them. `family.timezone` is **autodetected** from the host (`readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`) and is therefore NOT an input.
+This SEED needs **one** operator-supplied value — the owner's iMessage handle. The display name and calendar account are **derived** (the way `family.timezone` already is), so they cost no question: the installer only has to ask for the handle, which keeps the whole dependency graph within the ≤3-question budget. The one input is `kind: input`, `phase: preflight` (collectible before install); the env-var name lives in `satisfy`. The installer unions all preflight inputs across the dependency tree and asks them ONCE up front — this SEED only DECLARES them, it does not collect them.
 
 | kind | label | phase | satisfy | bypass |
 |---|---|---|---|---|
-| input | Household owner's display name (how the dashboard refers to you) | preflight | `LD_OWNER_NAME` | |
 | input | Owner's iMessage handle — an E.164 phone (`+15551234567`) or an email address | preflight | `LD_OWNER_IMESSAGE` | |
-| input | Account that owns the primary calendar (e.g. `sam@example.com`) | preflight | `LD_CALENDAR_ACCOUNT` | |
 
-Run the following block to assemble + land the household config, land the secrets, and install the bundles. The three `LD_*` inputs above MUST be in the environment when it runs (the installer exports them from the preflight answers; a hand-run sets them inline as shown) — on first install the script assembles `ld-config` from them and exits non-zero if any is missing. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
+**Derived, NOT inputs** (each costs zero questions; set the env var to override the default):
+
+- `family.owner.name` — autodetected from the host's full name (`id -F`, fallback `$USER`); override with `LD_OWNER_NAME`.
+- `family.timezone` — autodetected from `readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`.
+- `calendar.sources[0].account` — defaults to the owner's iMessage handle when that handle is an email; override with `LD_CALENDAR_ACCOUNT`.
+
+Run the following block to assemble + land the household config, land the secrets, and install the bundles. `LD_OWNER_IMESSAGE` MUST be in the environment when it runs (the installer exports it from the preflight answer; a hand-run sets it inline as shown) — on first install the script assembles `ld-config`, deriving the owner name and calendar account when their override vars are unset, and exits non-zero only if the handle is missing. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
 
 ```bash
 set -euo pipefail
-export LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT   # set from the Requirements above
+export LD_OWNER_IMESSAGE                       # the one required input (Requirements above)
+export LD_OWNER_NAME LD_CALENDAR_ACCOUNT       # optional overrides; derived if unset
 bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ```
 
@@ -78,7 +83,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### ld-config is landed
 
-- On first install, the install action ASSEMBLES `<app_support>/agent-runtime/runtime/ld/config.json` (mode 600) from the declared [inputs](#requirements) and lands it via mktemp+rename inside the destination dir. The assembled JSON mirrors the vendored example's shape: `family.owner.{name,imessage}` from `LD_OWNER_NAME` / `LD_OWNER_IMESSAGE`, one `calendar.sources` entry with `account` from `LD_CALENDAR_ACCOUNT` and `calendar_id: "primary"`, the autodetected `family.timezone`, and the example's real `calendar_nudge` lookahead defaults. The agent MAY express the assembly with a small inline `jq` filter, e.g.:
+- On first install, the install action ASSEMBLES `<app_support>/agent-runtime/runtime/ld/config.json` (mode 600) from the one declared [input](#requirements) plus the derived values, and lands it via mktemp+rename inside the destination dir. The assembled JSON mirrors the vendored example's shape: `family.owner.{name,imessage}` from the resolved `LD_OWNER_NAME` (autodetected if unset) and `LD_OWNER_IMESSAGE`, one `calendar.sources` entry with `account` from the resolved `LD_CALENDAR_ACCOUNT` (derived from the handle if unset) and `calendar_id: "primary"`, the autodetected `family.timezone`, and the example's real `calendar_nudge` lookahead defaults. The agent MAY express the assembly with a small inline `jq` filter, e.g.:
 
   ```bash
   jq -n --arg tz "$LD_TIMEZONE" '
@@ -87,7 +92,11 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
   ```
 
   but the exact filter is the agent's to adapt to the host — the contract below is what MUST hold, not a specific command.
-- **family.timezone is autodetected, not an input.** The IANA zone is everything after the last `/zoneinfo/` in `readlink /etc/localtime` (e.g. `/usr/share/zoneinfo/America/New_York` → `America/New_York`), falling back to `America/Los_Angeles` when detection yields nothing — so a non-Pacific household gets the right local time without a 4th question. This is one inline `readlink` + parse, not a sourced helper.
+- **Three values are derived, not asked** — so the only question this SEED contributes to the up-front batch is the iMessage handle. Each is resolved by an inline shell step (not a sourced helper) before the `jq` filter runs:
+  - `family.owner.name` — `id -F` (the host's full name), falling back to `id -un` (the username); skipped when `LD_OWNER_NAME` is already set.
+  - `family.timezone` — everything after the last `/zoneinfo/` in `readlink /etc/localtime` (e.g. `/usr/share/zoneinfo/America/New_York` → `America/New_York`), fallback `America/Los_Angeles`.
+  - `calendar.sources[0].account` — the owner's iMessage handle when it's an email (`*@*`); skipped when `LD_CALENDAR_ACCOUNT` is already set. When the handle is a phone and no override is given, the install fails loud asking for `LD_CALENDAR_ACCOUNT` rather than landing a bad account.
+  Name and calendar account are PII (see the next bullet), so they reach `jq` only via the environment; only the non-PII timezone uses `--arg`.
 - **PII never leaks.** The operator inputs (owner name/handle, calendar account) are personal-context-secret. They MUST NOT be echoed to stdout, MUST NOT be written anywhere in the SEED tree, and MUST reach `jq` only **through the environment, read inside the filter via jq's `env` builtin — never `--arg`/argv** (which would surface them in `/proc/<pid>/cmdline`). Only the non-PII autodetected `family.timezone` MAY be passed via `--arg`. The assembled config is JSON-validated AND run through the [minimal structural gate](#minimal-structural-gate) BEFORE the atomic `mv`; a blank input or a gate failure FAILS LOUD, non-zero, with nothing landed (a landed-but-bad file would short-circuit every retry).
 - Re-runs MUST NOT overwrite an existing config that PASSES the [minimal structural gate](#minimal-structural-gate) — the operator's edits are the canonical state, even if its zone drifted from the current host (a laptop moved, or a hand-set remote zone). The ONE exception: when the existing file FAILS the gate (a first run that landed nothing usable, or a corrupted edit), the action re-assembles from the inputs and atomically replaces it through the same validation path — otherwise the early "file exists" return would silently ignore a corrected rerun.
 - After landing (or detecting a gate-passing existing) `ld-config`, the install action MUST gate the bundle POST on the [minimal structural gate](#minimal-structural-gate). If the gate fails, the action MUST exit NON-ZERO with a loud "NOT installed" message (distinct from a successful install) BEFORE the bundle POST, NAMING the failing invariant (never the PII values). The [`ld-config` verify check](#verification) cross-checks the same gate at verify time. Single source of truth for "installed": `ld-config` passes the gate. Install, verify, and the operator instructions all agree on this definition.
