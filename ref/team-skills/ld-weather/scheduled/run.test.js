@@ -9,7 +9,7 @@ const TZ = "America/Los_Angeles";
 function baseConfig(overrides = {}) {
   return {
     family: { timezone: TZ },
-    weather: { location: "Mountain View", lat: 37.386, lon: -122.083, units: "F" },
+    weather: { location: "Mountain View", lat: 37.386, lon: -122.083 },
     ...overrides,
   };
 }

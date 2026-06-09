@@ -204,6 +204,19 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   echo "ld-config assembled + landed at $LD_CONFIG (timezone: $LD_TIMEZONE)." >&2
 fi
 
+# Preserve-path upgrade: a gate-passing existing config is the operator's
+# canonical edit, but one that predates ld-weather lacks the `weather` section
+# the now-auto-activating scheduled runner reads — it would fail-loud every
+# ~5-min tick. Backfill the Mountain View defaults ONLY when the section is
+# absent (never overwrite operator values), so an upgrade activates cleanly.
+if [ "$NEED_ASSEMBLE" = "0" ] && [ "$(jq -r 'has("weather")' "$LD_CONFIG" 2>/dev/null)" = "false" ]; then
+  TMP=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  jq '. + { weather: { location: "Mountain View", lat: 37.386, lon: -122.083 } }' "$LD_CONFIG" > "$TMP"
+  chmod 600 "$TMP"
+  mv "$TMP" "$LD_CONFIG"
+  echo "backfilled weather defaults into the preserved ld-config (ld-weather upgrade)." >&2
+fi
+
 # The three operator inputs arrive EXPORTED in this script's environment (the
 # installer sets them to assemble the config). Clear them now — before the
 # bundle-POST python3 child below — so owner PII is not inherited into that
