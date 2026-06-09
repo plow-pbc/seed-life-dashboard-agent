@@ -55,6 +55,9 @@ done
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 # shellcheck source=ref/lib/ld_config.sh
 . "$SEED_ROOT/ref/lib/ld_config.sh"
+# shellcheck source=ref/lib/detect-timezone.sh
+. "$SEED_ROOT/ref/lib/detect-timezone.sh"
+LD_TZ="$(ld_detect_timezone)"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
 [ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
 LD_CONFIG_EXAMPLE="$BUNDLES_DIR/ld-shared/references/config.example.json"
@@ -117,28 +120,31 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Land ld-config (resolution + landing contract lives in
-#    ref/lib/ld_config.sh so `just test` covers it). Three ways the file
-#    gets populated, in priority: (a) already present -> preserve; (b)
-#    LD_CONFIG_SRC=- -> consume a supplied config from stdin,
-#    JSON-validated AND minimal-gated BEFORE the
-#    atomic mv so nothing bad lands; (c) neither -> copy the vendored
-#    example. Config values are PII — never echoed.
-ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE"
+# 6. Land ld-config (assembly + landing contract lives in ref/lib/ld_config.sh
+#    so the test suite covers it). Three ways the file gets populated, in
+#    priority: (a) already present + gate-passing -> preserve; (b) the operator
+#    inputs are in the env -> ASSEMBLE the config from them (the default
+#    single-shot path), or LD_CONFIG_SRC=- -> consume a supplied config from
+#    stdin (escape hatch); either is JSON-validated AND minimal-gated BEFORE the
+#    atomic mv so nothing bad lands; (c) neither -> copy the vendored example.
+#    family.timezone is autodetected from the host. Config values are PII —
+#    never echoed.
+ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE" "$LD_TZ"
 
 # Minimal install gate (contract defined in ref/lib/ld_config.sh, shared with
 # verify.sh): calendar.sources is a non-empty array AND no [UPPER_SNAKE]
 # placeholder remains anywhere. Emits the failing invariant's NAME only —
 # never the PII values — for an actionable message.
-MISSING=$(ld_config_missing_required "$LD_CONFIG")
+MISSING=$(ld_config_missing_required "$LD_CONFIG" "$LD_TZ")
 if [ -n "$MISSING" ]; then
   echo "" >&2
   echo "ld-config at $LD_CONFIG does not pass the install gate:" >&2
   echo "$MISSING" | sed 's/^/  - /' >&2
   echo "" >&2
-  echo "Fill in the [UPPER_SNAKE] placeholders (owner identity + at least one" >&2
-  echo "calendar account) and ensure calendar.sources is a non-empty array," >&2
-  echo "then re-run this install (or supply a complete config via LD_CONFIG_SRC)." >&2
+  echo "Set the operator inputs (LD_OWNER_NAME, LD_OWNER_IMESSAGE," >&2
+  echo "LD_CALENDAR_ACCOUNT) so the config can be assembled — or fill in the" >&2
+  echo "[UPPER_SNAKE] placeholders in the landed config and ensure" >&2
+  echo "calendar.sources is a non-empty array — then re-run this install." >&2
   echo "Optional sections (partner, extra calendars," >&2
   echo "long-lead type) may be left empty. Per-field requirements are enforced" >&2
   echo "at runtime by each bundle." >&2
