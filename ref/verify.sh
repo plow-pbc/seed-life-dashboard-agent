@@ -18,22 +18,37 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
-# v1b: ld-config present + parses as JSON + no remaining placeholders.
-# Presence + JSON-parse is the floor; the placeholder check (any
-# string value matching the `[OWNER_*]` / `[FAMILY_*]` / `[YOUR_*]`
-# pattern the example ships with) catches the silent partial-install
-# class where a fresh `cp config.example.json -> config.json` leaves
-# the bundles wired against fictional household data.
+# v1b: ld-config present + parses as JSON + passes the minimal
+# structural gate. This is the SAME gate install-bundles.sh enforces
+# pre-mutation (SEED.md ## Actions > minimal structural gate), so
+# install and verify can never drift. The gate is deliberately MINIMAL
+# — it does NOT mirror run.js's per-field runtime requirements (those
+# are the bundles' single source of truth) — it asserts only the
+# invariants that separate a USABLE filled config from an unedited
+# template or a blank-filled one:
+#   - family.owner.{name,imessage} present and non-blank
+#   - calendar.sources a non-empty array, each source's account non-blank
+#   - no string value left as a bare [UPPER_SNAKE] placeholder
+# The autodetected timezone is NOT re-checked: a preserved / operator-
+# edited config may legitimately carry a non-host zone (laptop moved,
+# remote household), so enforcing it here would falsely reject a valid
+# config. PII never prints — only the failing invariant's name.
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-# Generic `[UPPER_SNAKE]` placeholder detector — matches the same
-# pattern install-bundles.sh's pre-mutation gate uses. Catches
-# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
-# [FAMILY_TIMEZONE], [YOUR_*], etc. — anything that survives the
-# bot-flagged "specific-token list" shape.
-PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
-if [ "$PLACEHOLDERS" != "0" ]; then
-  echo "FAIL v-ld-config: $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s) — edit the file with your household's real values and re-run the install before verifying." >&2
+GATE=$(jq -r '
+  [ if ((.family.owner.name    // "") | test("\\S")) then empty else "family.owner.name is blank" end,
+    if ((.family.owner.imessage // "") | test("\\S")) then empty else "family.owner.imessage is blank" end,
+    if ((.calendar.sources | type) == "array" and (.calendar.sources | length) >= 1)
+      then empty else "calendar.sources is not a non-empty array" end,
+    if ([.calendar.sources[]? | select(((.account // "") | test("\\S")) | not)] | length) == 0
+      then empty else "a calendar.sources[].account is blank" end,
+    if ([.. | strings | select(test("^\\[[A-Z][A-Z0-9_]*\\]$"))] | length) == 0
+      then empty else "an unfilled [UPPER_SNAKE] placeholder remains" end
+  ] | join("; ")
+' "$LD_CONFIG")
+if [ -n "$GATE" ]; then
+  echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate: $GATE" >&2
+  echo "Fix the config (or re-run install with the LD_OWNER_* / LD_CALENDAR_ACCOUNT inputs set) before verifying." >&2
   exit 1
 fi
 echo "OK   v-ld-config"

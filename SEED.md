@@ -19,7 +19,17 @@ Software:
 - `https://github.com/plow-pbc/seed-life-dashboard-relay` — deploys the Vercel relay and writes the state file consumed below.
 - System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`. No install needed.
 
-Run the following block to install the bundles + land the secrets. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback) and rewrites the two secret files.
+### Requirements
+
+This SEED's three operator-supplied values — the household facts it [assembles `config.json` from](#ld-config). All are `kind: input`, `phase: preflight` (collectible before install); the env-var name lives in `satisfy`. The installer unions all preflight inputs across the dependency tree and asks them ONCE up front — this SEED only DECLARES them, it does not collect them. `family.timezone` is **autodetected** from the host (`readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`) and is therefore NOT an input.
+
+| kind | label | phase | satisfy | bypass |
+|---|---|---|---|---|
+| input | Household owner's display name (how the dashboard refers to you) | preflight | `LD_OWNER_NAME` | |
+| input | Owner's iMessage handle — an E.164 phone (`+15551234567`) or an email address | preflight | `LD_OWNER_IMESSAGE` | |
+| input | Account that owns the primary calendar (e.g. `sam@example.com`) | preflight | `LD_CALENDAR_ACCOUNT` | |
+
+Run the following block to assemble + land the household config, land the secrets, and install the bundles. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback) and rewrites the two secret files.
 
 ```bash
 set -euo pipefail
@@ -45,8 +55,9 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### ld-config
 
-- The household-state file at `<app_support>/agent-runtime/runtime/ld/config.json`, mode 600. Holds family facts, calendar accounts, per-skill prefs that every `ld-*` bundle reads at its first invocation. plowd bind-mounts the VM-side path `/config/runtime/ld/config.json` from here.
-- The SEED copies `ref/team-skills/ld-shared/references/config.example.json` into this path on first install ONLY — subsequent runs preserve operator edits. The example contains placeholder values; the operator MUST edit it with their household's real values before the bundles function correctly. The SEED MUST NOT invent these values (per the seed-convention's secret-redaction rule — household data is personal-context-secret).
+- The household-state file at `<app_support>/agent-runtime/runtime/ld/config.json`, mode 600. Holds the family facts, calendar accounts, and per-skill prefs that every `ld-*` bundle reads at its first invocation. plowd bind-mounts the VM-side path `/config/runtime/ld/config.json` from here.
+- On first install, the SEED ASSEMBLES this file from the declared [inputs](#requirements) (the action's prose is in [ld-config is landed](#ld-config-is-landed)). It mirrors the shape of the vendored example (`ref/team-skills/ld-shared/references/config.example.json`) — `family.owner.{name,imessage}`, an autodetected `family.timezone`, one `calendar.sources[0]` (`calendar_id: "primary"`), and real defaults for the `calendar_nudge` lookaheads — with every `[UPPER_SNAKE]` placeholder filled and optional sections (partner, extra calendars, long-lead) omitted. Single-parent / single-calendar is the default; an operator who wants more edits the landed file directly.
+- Re-runs preserve an existing config that passes the structural gate — the operator's edits are canonical. The ONE exception: a landed file that still FAILS the gate (e.g. a corrupted edit) is re-assembled from the inputs through the same validation path, so a corrected rerun is not short-circuited by the early "file exists" return.
 
 ## Actions
 
@@ -66,14 +77,32 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### ld-config is landed
 
-- The install action MUST copy `ref/team-skills/ld-shared/references/config.example.json` to `<app_support>/agent-runtime/runtime/ld/config.json` at mode 600 on first install ONLY. Re-runs MUST NOT overwrite the file — the operator's edits are the canonical state.
-- After landing (or detecting an existing) `ld-config`, the install action MUST scan the file for any `[UPPER_SNAKE]` placeholder (regex `\\[[A-Z][A-Z0-9_]*\\]` matched against all string values via `jq` recursive descent). If ANY placeholder remains, the install action MUST exit 0 with a loud "edit ld-config and re-run" message BEFORE the bundle POST — activating scheduled bundles against placeholder data would land code that fails at the first scheduled tick. The [`ld-config` verify check](#verify) cross-checks the same gate at verify time.
-- Single source of truth for "installed": `ld-config` has no `[UPPER_SNAKE]` placeholders. Install, verify, and the operator instructions all agree on this definition.
+- On first install, the install action ASSEMBLES `<app_support>/agent-runtime/runtime/ld/config.json` (mode 600) from the declared [inputs](#requirements) and lands it via mktemp+rename inside the destination dir. The assembled JSON mirrors the vendored example's shape: `family.owner.{name,imessage}` from `LD_OWNER_NAME` / `LD_OWNER_IMESSAGE`, one `calendar.sources` entry with `account` from `LD_CALENDAR_ACCOUNT` and `calendar_id: "primary"`, the autodetected `family.timezone`, and the example's real `calendar_nudge` lookahead defaults. The agent MAY express the assembly with a small inline `jq` filter, e.g.:
 
-## Verify
+  ```bash
+  jq -n --arg tz "$LD_TIMEZONE" '
+    { family: { owner: { name: env.LD_OWNER_NAME, imessage: env.LD_OWNER_IMESSAGE }, timezone: $tz },
+      calendar: { sources: [ { account: env.LD_CALENDAR_ACCOUNT, calendar_id: "primary", name: "Personal" } ] } }'
+  ```
+
+  but the exact filter is the agent's to adapt to the host — the contract below is what MUST hold, not a specific command.
+- **family.timezone is autodetected, not an input.** The IANA zone is everything after the last `/zoneinfo/` in `readlink /etc/localtime` (e.g. `/usr/share/zoneinfo/America/New_York` → `America/New_York`), falling back to `America/Los_Angeles` when detection yields nothing — so a non-Pacific household gets the right local time without a 4th question. This is one inline `readlink` + parse, not a sourced helper.
+- **PII never leaks.** The operator inputs (owner name/handle, calendar account) are personal-context-secret. They MUST NOT be echoed to stdout, MUST NOT be written anywhere in the SEED tree, and MUST reach `jq` only **through the environment, read inside the filter via jq's `env` builtin — never `--arg`/argv** (which would surface them in `/proc/<pid>/cmdline`). Only the non-PII autodetected `family.timezone` MAY be passed via `--arg`. The assembled config is JSON-validated AND run through the [minimal structural gate](#minimal-structural-gate) BEFORE the atomic `mv`; a blank input or a gate failure FAILS LOUD, non-zero, with nothing landed (a landed-but-bad file would short-circuit every retry).
+- Re-runs MUST NOT overwrite an existing config that PASSES the [minimal structural gate](#minimal-structural-gate) — the operator's edits are the canonical state, even if its zone drifted from the current host (a laptop moved, or a hand-set remote zone). The ONE exception: when the existing file FAILS the gate (a first run that landed nothing usable, or a corrupted edit), the action re-assembles from the inputs and atomically replaces it through the same validation path — otherwise the early "file exists" return would silently ignore a corrected rerun.
+- After landing (or detecting a gate-passing existing) `ld-config`, the install action MUST gate the bundle POST on the [minimal structural gate](#minimal-structural-gate). If the gate fails, the action MUST exit NON-ZERO with a loud "NOT installed" message (distinct from a successful install) BEFORE the bundle POST, NAMING the failing invariant (never the PII values). The [`ld-config` verify check](#verification) cross-checks the same gate at verify time. Single source of truth for "installed": `ld-config` passes the gate. Install, verify, and the operator instructions all agree on this definition.
+
+### minimal structural gate
+
+- The structural gate is deliberately MINIMAL — rather than mirror `run.js`'s field-by-field runtime requirements (which is the bundles' single source of truth, and whose duplication here only drifts), it checks only the invariants that distinguish a USABLE filled config from an unedited template or a blank-filled one:
+  - `family.owner.{name,imessage}` are present and **non-blank** (a whitespace-only value is rejected, not just empty/missing).
+  - `calendar.sources` is a **non-empty array**, and each source's `account` is **non-blank**.
+  - **No string value is left as a bare `[UPPER_SNAKE]` placeholder** (a real value that merely contains a bracketed token — e.g. a calendar named "Work [TEAM]" — is fine; the match is whole-string anchored).
+- The gate lives inline as a few `jq` lines in [`ref/verify.sh`](ref/verify.sh) (the `v-ld-config` check) and the same inline check in the install action. It does NOT re-check the autodetected timezone: a preserved or operator-edited config may legitimately carry a non-host zone, so re-enforcing it would falsely reject a valid config. Per-field runtime requirements (a finite lookahead, every source carrying a real `calendar_id`, at least one non-`self:false` owner source) are enforced at runtime by each bundle — the install gate intentionally does NOT duplicate that list.
+
+## Verification
 
 1. **Dashboard secrets present.** Do `<app_support>/agent-runtime/secrets/dashboard-endpoint-url` and `dashboard-token` exist with mode `600` and non-zero size? Expected: yes.
-2. **ld-config present, well-formed, and fully resolved.** Does `<app_support>/agent-runtime/runtime/ld/config.json` exist, parse as JSON, AND contain NO `[UPPER_SNAKE]` placeholder values (matched by `\\[[A-Z][A-Z0-9_]*\\]` over the JSON's string values, recursive)? Expected: yes — placeholders are the SEED's single source of truth for "install not yet complete." [ld-config is landed](#ld-config-is-landed) enforces the same gate at install time (refuses to POST bundles while placeholders remain); this verify step is the cross-check that the gate held.
+2. **ld-config present, well-formed, and passes the structural gate.** Does `<app_support>/agent-runtime/runtime/ld/config.json` exist, parse as JSON, AND pass the [minimal structural gate](#minimal-structural-gate) — `family.owner.{name,imessage}` non-blank, `calendar.sources` a non-empty array with non-blank `account`s, and no string value left as a bare `[UPPER_SNAKE]` placeholder? Expected: yes — a gate-passing config is the SEED's single source of truth for "install complete." [ld-config is landed](#ld-config-is-landed) enforces the same gate at install time (refuses to POST bundles otherwise); this verify step is the cross-check that the gate held. The timezone is NOT re-checked here (a preserved config may carry a non-host zone). The values are PII, so only the check name prints, never the contents.
 3. **Bundles installed.** Do all five `SKILL.md` files (or, for `ld-shared`, the `scripts/post_to_kiosk.py` file) exist inside the main agent container's bind-mounted workspace at `<app_support>/containers/<container-UUID>/workspace/skills/ld-*`? Expected: yes.
 4. **Endpoint+token are syntactically usable.** Does one of the vendored `post_*.py` wrappers invoked with `--dry-run` produce a redacted-body output line (proving the secrets resolve and the wrapper executes)? Expected: yes.
 
@@ -83,7 +112,7 @@ A deterministic bash implementation lives at [`ref/verify.sh`](ref/verify.sh).
 
 (default)
 
-## Open
+## Open Items
 
 - **Bundle drift.** The vendored copies under `ref/team-skills/` diverge from `plow4/team-skills/ld-*` unless a `just vendor-ld-skills` recipe (TBD location) keeps them in lock-step. v1 known issue.
 - **plowd port discovery.** Today we replicate `plow4/justfile`'s pattern. A pinned, plowd-published port file would make this SEED's install simpler.

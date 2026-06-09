@@ -6,9 +6,10 @@
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
-# the two secret files. The ld-config is copied from the vendored
-# example ONLY on first install; subsequent runs preserve operator
-# edits.
+# the two secret files. The ld-config is ASSEMBLED from the three
+# operator inputs (LD_OWNER_NAME / LD_OWNER_IMESSAGE /
+# LD_CALENDAR_ACCOUNT) on first install ONLY; subsequent runs preserve
+# a gate-passing operator-edited config.
 #
 # Relay-state validation + ld-config write happen BEFORE the bundle
 # POST so that no scheduled code is activated until the runtime
@@ -47,8 +48,6 @@ done
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
 [ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
-LD_CONFIG_EXAMPLE="$BUNDLES_DIR/ld-shared/references/config.example.json"
-[ -f "$LD_CONFIG_EXAMPLE" ] || { echo "no ld-config example at $LD_CONFIG_EXAMPLE" >&2; exit 1; }
 
 # 3. Discover plowd's HTTP API port. Same pattern as plow4/justfile.
 if [ -s "$APP_SUPPORT/dev-plowd-port" ]; then
@@ -107,42 +106,111 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Land ld-config from the vendored example ONLY if not already
-#    present — never overwrite operator edits. The example contains
-#    `[UPPER_SNAKE]` placeholders the operator must replace; the SEED
-#    convention forbids the install from inventing household values.
-#
-# Contract: placeholder config means "install not yet complete." If
-# placeholders are still present (either because we just copied the
-# example, or because the operator's prior pass exited without
-# editing), this install does NOT POST bundles — it surfaces the
-# next step and exits 0 (re-run after editing). Activating scheduled
-# code against `[OWNER_NAME]` / `[FAMILY_TIMEZONE]` / `[CALENDAR_*]`
-# placeholders would land bundles that fail at the first scheduled
-# tick — that's the silent-partial-install class this gate
-# eliminates, and it keeps install / verify / SEED.md aligned on a
-# single definition of "installed."
+# 6. Assemble + land ld-config from the three operator inputs on first
+#    install ONLY; preserve a gate-passing operator-edited config on
+#    re-runs (the operator's edits are canonical). The ONE exception:
+#    a landed file that still FAILS the gate is re-assembled from the
+#    inputs, so a corrected rerun is not short-circuited by "file
+#    exists." The gate is the SEED's single definition of "installed"
+#    (SEED.md ## Actions > minimal structural gate) — install, verify,
+#    and the operator instructions all agree on it.
 mkdir -p "$LD_CONFIG_DIR"
+
+# The minimal structural gate, inline. Prints the failing invariant(s)
+# (never the PII values) to stdout; empty output == PASS. Same checks
+# ref/verify.sh's v-ld-config enforces, so install + verify never drift.
+ld_config_gate() {  # ld_config_gate FILE -> prints failures (empty == pass)
+  jq -r '
+    [ if ((.family.owner.name     // "") | test("\\S")) then empty else "family.owner.name is blank" end,
+      if ((.family.owner.imessage // "") | test("\\S")) then empty else "family.owner.imessage is blank" end,
+      if ((.calendar.sources | type) == "array" and (.calendar.sources | length) >= 1)
+        then empty else "calendar.sources is not a non-empty array" end,
+      if ([.calendar.sources[]? | select(((.account // "") | test("\\S")) | not)] | length) == 0
+        then empty else "a calendar.sources[].account is blank" end,
+      if ([.. | strings | select(test("^\\[[A-Z][A-Z0-9_]*\\]$"))] | length) == 0
+        then empty else "an unfilled [UPPER_SNAKE] placeholder remains" end
+    ] | join("; ")
+  ' "$1" 2>/dev/null || echo "not valid JSON"
+}
+
+# Assemble only when there is no config yet, OR the existing one fails
+# the gate (corrupted / never-completed). A gate-passing existing file
+# is the operator's canonical edit — left untouched, even if its zone
+# drifted from the host.
+NEED_ASSEMBLE=0
 if [ ! -f "$LD_CONFIG" ]; then
-  cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
-  chmod 600 "$LD_CONFIG"
-  echo "" >&2
-  echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
+  NEED_ASSEMBLE=1
+elif [ -n "$(ld_config_gate "$LD_CONFIG")" ]; then
+  NEED_ASSEMBLE=1
 fi
 
-# Generic placeholder detector — any `[UPPER_SNAKE]` string anywhere
-# in the JSON (recursive descent via jq `..`). Specific tokens like
-# [OWNER_NAME], [PARTNER_*], [CALENDAR_ACCOUNT_1], [LONG_LEAD_TYPE],
-# [FAMILY_TIMEZONE], [YOUR_*] all match this one rule.
-PLACEHOLDERS=$(jq -r '[.. | strings | select(test("\\[[A-Z][A-Z0-9_]*\\]"))] | length' "$LD_CONFIG")
-if [ "$PLACEHOLDERS" != "0" ]; then
+if [ "$NEED_ASSEMBLE" = "1" ]; then
+  # All three inputs are REQUIRED to assemble — the installer collects
+  # them up front (SEED.md ### Requirements). A missing one fails loud
+  # rather than landing a partial config.
+  for v in LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT; do
+    eval "val=\${$v:-}"
+    case "$val" in
+      *[!\ ]*) ;;  # contains a non-space char
+      *) echo "$v is unset or blank — the installer must collect the three LD_* inputs before assembling ld-config" >&2; exit 1 ;;
+    esac
+  done
+
+  # Autodetect IANA timezone: everything after the last /zoneinfo/ in
+  # readlink /etc/localtime; fall back to America/Los_Angeles. Non-PII,
+  # so it is the ONLY value passed to jq via --arg.
+  TZLINK=$(readlink /etc/localtime 2>/dev/null || true)
+  case "$TZLINK" in
+    */zoneinfo/*) LD_TIMEZONE=${TZLINK##*/zoneinfo/} ;;
+    *) LD_TIMEZONE="" ;;
+  esac
+  [ -n "$LD_TIMEZONE" ] || LD_TIMEZONE="America/Los_Angeles"
+
+  # Assemble. The PII values (owner name/handle, calendar account) reach
+  # jq ONLY through the environment, read inside the filter via the `env`
+  # builtin — NEVER on argv, so they never surface in /proc/<pid>/cmdline.
+  # The values are scoped to jq's process via a per-command env prefix
+  # (not a script-level `export`), so they never leak into the later
+  # bundle-POST python3 child. Only the non-PII autodetected timezone is
+  # passed via --arg. Mirrors the vendored example's shape: single owner,
+  # one primary calendar, the example's real calendar_nudge lookahead
+  # defaults; optional sections (partner, extra calendars, long-lead)
+  # omitted.
+  TMP=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  LD_OWNER_NAME="$LD_OWNER_NAME" \
+  LD_OWNER_IMESSAGE="$LD_OWNER_IMESSAGE" \
+  LD_CALENDAR_ACCOUNT="$LD_CALENDAR_ACCOUNT" \
+  jq -n --arg tz "$LD_TIMEZONE" '
+    {
+      family: { owner: { name: env.LD_OWNER_NAME, imessage: env.LD_OWNER_IMESSAGE }, timezone: $tz },
+      calendar: { sources: [ { account: env.LD_CALENDAR_ACCOUNT, calendar_id: "primary", name: "Personal" } ] },
+      morning_updates: { review_window_hours: 24 },
+      morning_triage: { ranking_instructions: "", exclude: { imessage_handles: [], email_addresses: [] } },
+      calendar_nudge: { lookahead_virtual_minutes: 30, lookahead_in_person_minutes: 60 }
+    }
+  ' > "$TMP"
+  chmod 600 "$TMP"
+  FAILS=$(ld_config_gate "$TMP")
+  if [ -n "$FAILS" ]; then
+    rm -f "$TMP"
+    echo "assembled ld-config did NOT pass the structural gate: $FAILS" >&2
+    echo "NOT installed — no config landed and no bundles posted." >&2
+    exit 1
+  fi
+  mv "$TMP" "$LD_CONFIG"
   echo "" >&2
-  echo "ld-config at $LD_CONFIG still contains $PLACEHOLDERS placeholder value(s)." >&2
-  echo "Edit the file with your household's real values (family names," >&2
-  echo "timezone, calendar account IDs, etc.), then re-run this install." >&2
-  echo "The bundle install is GATED on a fully-resolved config — the" >&2
-  echo "bundles would fail at their first scheduled tick otherwise." >&2
-  exit 0
+  echo "ld-config assembled + landed at $LD_CONFIG (timezone: $LD_TIMEZONE)." >&2
+fi
+
+# Pre-POST gate: refuse to activate scheduled bundles unless the landed
+# config passes the structural gate. NAMES the failing invariant, never
+# the PII values. ref/verify.sh cross-checks the same gate at verify.
+FAILS=$(ld_config_gate "$LD_CONFIG")
+if [ -n "$FAILS" ]; then
+  echo "" >&2
+  echo "ld-config at $LD_CONFIG does NOT pass the structural gate: $FAILS" >&2
+  echo "NOT installed — bundles NOT posted. Re-run with the three LD_* inputs set." >&2
+  exit 1
 fi
 
 # 7. POST ALL bundles in a single tarball + single Python call so
