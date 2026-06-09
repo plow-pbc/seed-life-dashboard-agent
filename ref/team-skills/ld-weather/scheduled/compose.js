@@ -36,6 +36,11 @@ function extractWeather(hourly, daily) {
   if (!day || !Number.isFinite(day.temperature)) {
     throw new Error("NWS daily: no daytime high");
   }
+  // Guard the condition the same way as the temperatures: a daytime period
+  // without a string shortForecast would otherwise render "72°F undefined".
+  if (typeof day.shortForecast !== "string" || !day.shortForecast.trim()) {
+    throw new Error("NWS daily: missing condition");
+  }
   if (!night || !Number.isFinite(night.temperature)) {
     throw new Error("NWS daily: no nighttime low");
   }

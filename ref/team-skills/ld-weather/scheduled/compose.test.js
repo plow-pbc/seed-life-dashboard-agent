@@ -64,7 +64,19 @@ test("extractWeather fails loud on a malformed feed", () => {
   assert.throws(() => extractWeather({ properties: { periods: [] } }, daily(75, 54)), /current temperature/);
   assert.throws(() => extractWeather(hourly(72), { properties: { periods: [] } }), /no forecast periods/);
   assert.throws(
-    () => extractWeather(hourly(72), { properties: { periods: [{ isDaytime: true, temperature: 75 }] } }),
+    () =>
+      extractWeather(hourly(72), {
+        properties: {
+          periods: [
+            { isDaytime: true, temperature: 75 },
+            { isDaytime: false, temperature: 54 },
+          ],
+        },
+      }),
+    /missing condition/,
+  );
+  assert.throws(
+    () => extractWeather(hourly(72), { properties: { periods: [{ isDaytime: true, temperature: 75, shortForecast: "Sunny" }] } }),
     /no nighttime low/,
   );
 });

@@ -137,6 +137,33 @@ test("a failed kiosk POST surfaces loudly", async () => {
   );
 });
 
+test("missing family.timezone fails loud", async () => {
+  await assert.rejects(
+    run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: { weather: baseConfig().weather }, // no family.timezone
+      fetch: fakeFetch(),
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    }),
+    /timezone/,
+  );
+});
+
+test("a points body without forecast URLs fails loud", async () => {
+  const fetch = async () => ({ ok: true, status: 200, json: async () => ({ properties: {} }) });
+  await assert.rejects(
+    run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: baseConfig(),
+      fetch,
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    }),
+    /missing forecast URLs/,
+  );
+});
+
 test("missing weather.lat/lon fails loud", async () => {
   await assert.rejects(
     run({
