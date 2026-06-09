@@ -88,7 +88,7 @@ for p in "${probes[@]}"; do
 done
 echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 
-# v3: dry-run a wrapper. We use the host-side vendored copy here — same
+# v3: dry-run a wrapper. We use the host-side repo-local copy here — same
 # wrapper code that's installed inside the VM, just executed from the
 # host with rebound module-level constants. This proves the secrets
 # resolve and the wrapper executes; it does NOT post over the network.

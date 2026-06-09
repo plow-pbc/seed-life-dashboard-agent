@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# seed-life-dashboard-agent — POST the vendored ld-* bundles to local
+# seed-life-dashboard-agent — POST this repo's ld-* bundles to local
 # plowd's install endpoint; land the relay's endpoint+token + the
 # household ld-config in the agent-runtime dir so the bundles can run.
 #
@@ -47,7 +47,7 @@ done
 
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
-[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
+[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — incomplete checkout?" >&2; exit 1; }
 
 # 3. Discover plowd's HTTP API port. Same pattern as plow4/justfile.
 if [ -s "$APP_SUPPORT/dev-plowd-port" ]; then
@@ -231,7 +231,7 @@ fi
 BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
-    echo "missing vendored bundle: $bundle" >&2
+    echo "missing bundle: $bundle" >&2
     exit 1
   }
 done
