@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# seed-life-dashboard-agent — POST the vendored ld-* bundles to local
+# seed-life-dashboard-agent — POST this repo's ld-* bundles to local
 # plowd's install endpoint; land the relay's endpoint+token + the
 # household ld-config in the agent-runtime dir so the bundles can run.
+# This repo is the source-of-truth for the bundles under ref/team-skills/.
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
 # with-rollback over the SINGLE multi-bundle transaction) and rewrites
-# the two secret files. The ld-config is copied from the vendored
+# the two secret files. The ld-config is copied from ld-shared's
 # example ONLY on first install; subsequent runs preserve operator
 # edits.
 #
@@ -46,7 +47,7 @@ done
 
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
-[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — vendor the bundles first" >&2; exit 1; }
+[ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — incomplete checkout?" >&2; exit 1; }
 LD_CONFIG_EXAMPLE="$BUNDLES_DIR/ld-shared/references/config.example.json"
 [ -f "$LD_CONFIG_EXAMPLE" ] || { echo "no ld-config example at $LD_CONFIG_EXAMPLE" >&2; exit 1; }
 
@@ -107,7 +108,7 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Land ld-config from the vendored example ONLY if not already
+# 6. Land ld-config from ld-shared's example ONLY if not already
 #    present — never overwrite operator edits. The example contains
 #    `[UPPER_SNAKE]` placeholders the operator must replace; the SEED
 #    convention forbids the install from inventing household values.
@@ -127,7 +128,7 @@ if [ ! -f "$LD_CONFIG" ]; then
   cp "$LD_CONFIG_EXAMPLE" "$LD_CONFIG"
   chmod 600 "$LD_CONFIG"
   echo "" >&2
-  echo "ld-config landed at $LD_CONFIG from the vendored example." >&2
+  echo "ld-config landed at $LD_CONFIG from ld-shared's example." >&2
 fi
 
 # Generic placeholder detector — any `[UPPER_SNAKE]` string anywhere
@@ -155,7 +156,7 @@ fi
 BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
-    echo "missing vendored bundle: $bundle" >&2
+    echo "missing bundle: $bundle" >&2
     exit 1
   }
 done
