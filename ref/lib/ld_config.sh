@@ -74,7 +74,7 @@ ld_config_missing_required() {
 # Writes the assembled JSON to stdout. Returns non-zero on a missing/blank input
 # or a jq failure.
 ld_config_assemble() {
-  local example="$1" tz="$2" v
+  local example="$1" tz="$2" v val
   for v in LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT; do
     eval "val=\${$v:-}"
     case "$val" in

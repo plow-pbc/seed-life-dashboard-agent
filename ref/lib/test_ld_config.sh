@@ -15,13 +15,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$HERE/ld_config.sh"
-. "$HERE/detect-timezone.sh"
 EXAMPLE="$HERE/../team-skills/ld-shared/references/config.example.json"
-# The zone install/verify autodetect on THIS host. The real install-bundles.sh
-# and verify.sh pass it to the gate, so the integration fixtures below must
-# carry it (a config landed with a different zone would fail the tz check) —
-# keeping these tests hermetic across hosts regardless of /etc/localtime.
-HOST_TZ="$(ld_detect_timezone)"
 
 passed=0
 failed=0
@@ -290,9 +284,10 @@ run_verify() {  # run_verify <config-json> -> prints verify.sh output
   mkdir -p "$secrets" "$lddir"
   printf 'https://x.test/api/message' > "$secrets/dashboard-endpoint-url"; chmod 600 "$secrets/dashboard-endpoint-url"
   printf 'tok' > "$secrets/dashboard-token"; chmod 600 "$secrets/dashboard-token"
-  # Stamp the host-autodetected zone into the fixture so a gate-passing config
-  # also passes verify.sh's tz check (it autodetects + asserts the same zone).
-  printf '%s' "$cfg" | jq --arg tz "$HOST_TZ" '.family.timezone = $tz' > "$lddir/config.json"
+  # The config lands verbatim — verify.sh checks the STRUCTURAL invariants only
+  # (no tz-match), so the fixture's zone is irrelevant to whether v-ld-config
+  # passes. The tz-match regression guard runs at assembly time, not verify.
+  printf '%s' "$cfg" > "$lddir/config.json"
   HOME="$d/home" PATH="$(fixture_path "$d")" bash "$HERE/../verify.sh" 2>&1
 }
 
@@ -307,6 +302,15 @@ check "verify.sh exits non-zero on an incomplete ld-config" "$([ "$rc" -ne 0 ] &
 out="$(run_verify "$GOOD_CFG")"
 case "$out" in *"OK   v-ld-config"*) check "verify.sh accepts a complete ld-config (shares the gate)" 0 ;;
               *) check "verify.sh accepts a complete ld-config (shares the gate)" 1 ;; esac
+
+# A structurally-valid config whose family.timezone is NOT the host zone (an
+# operator-edited / preserved config after a kiosk move, or a supplied one for a
+# different host) must still PASS verify — the install post gate and verify both
+# check structural invariants only, so the two never disagree with the
+# tz-omitting path-(a) preservation in resolve_and_land.
+out="$(run_verify '{"family":{"owner":{"name":"Sam","imessage":"x@y"},"timezone":"Asia/Tokyo"},"calendar":{"sources":[{"account":"a@b","calendar_id":"primary"}]}}')"
+case "$out" in *"OK   v-ld-config"*) check "verify.sh accepts a valid config with a non-host timezone (no tz-match in post gate)" 0 ;;
+              *) check "verify.sh accepts a valid config with a non-host timezone (no tz-match in post gate)" 1 ;; esac
 
 # ─────────── the REAL installer gates before any marketplace POST ───────────
 # The unit cases above drive ld_config.sh directly; this one runs the actual

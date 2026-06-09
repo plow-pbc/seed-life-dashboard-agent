@@ -6,9 +6,6 @@ set -euo pipefail
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 # shellcheck source=ref/lib/ld_config.sh
 . "$SEED_ROOT/ref/lib/ld_config.sh"
-# shellcheck source=ref/lib/detect-timezone.sh
-. "$SEED_ROOT/ref/lib/detect-timezone.sh"
-LD_TZ="$(ld_detect_timezone)"
 
 PLOW_BUNDLE_ID="${PLOW_BUNDLE_ID:-co.plow.app}"
 APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
@@ -33,7 +30,13 @@ echo "OK   v-secrets"
 # never drift.
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-MISSING=$(ld_config_missing_required "$LD_CONFIG" "$LD_TZ")
+# Structural invariants only (no tz-match): the landed config may be an
+# operator-edited / supplied one whose zone is intentionally non-host, and the
+# tz-match regression guard already ran against the assembled config at landing
+# time (ref/lib/ld_config.sh). Enforcing it here would falsely reject a valid
+# preserved config — and the install post gate doesn't enforce it either, so the
+# two stay in agreement.
+MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
   echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate:" >&2
   echo "$MISSING" | sed 's/^/  - /' >&2

@@ -135,7 +135,14 @@ ld_config_resolve_and_land "$LD_CONFIG" "$LD_CONFIG_EXAMPLE" "$LD_TZ"
 # verify.sh): calendar.sources is a non-empty array AND no [UPPER_SNAKE]
 # placeholder remains anywhere. Emits the failing invariant's NAME only —
 # never the PII values — for an actionable message.
-MISSING=$(ld_config_missing_required "$LD_CONFIG" "$LD_TZ")
+# The post-landing gate checks the STRUCTURAL invariants only (no tz-match): a
+# config the SEED just ASSEMBLED already had its zone verified against the host
+# in resolve_and_land's to-land gate, and a PRESERVED operator-edited / supplied
+# config is canonical — its zone (hand-set, or drifted after a kiosk move) must
+# not turn a structurally-valid config into a hard "NOT installed". The tz-match
+# (regression guard on the assembled config) lives at the single point that
+# builds it, not here — so the landing gate and this post gate never disagree.
+MISSING=$(ld_config_missing_required "$LD_CONFIG")
 if [ -n "$MISSING" ]; then
   echo "" >&2
   echo "ld-config at $LD_CONFIG does not pass the install gate:" >&2
