@@ -151,7 +151,7 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   for v in LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT; do
     eval "val=\${$v:-}"
     case "$val" in
-      *[!\ ]*) ;;  # contains a non-space char
+      *[![:space:]]*) ;;  # contains a non-whitespace char (matches the jq gate's \S)
       *) echo "$v is unset or blank — the installer must collect the three LD_* inputs before assembling ld-config" >&2; exit 1 ;;
     esac
   done
@@ -169,10 +169,11 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   # Assemble. The PII values (owner name/handle, calendar account) reach
   # jq ONLY through the environment, read inside the filter via the `env`
   # builtin — NEVER on argv, so they never surface in /proc/<pid>/cmdline.
-  # The values are scoped to jq's process via a per-command env prefix
-  # (not a script-level `export`), so they never leak into the later
-  # bundle-POST python3 child. Only the non-PII autodetected timezone is
-  # passed via --arg. Mirrors the vendored example's shape: single owner,
+  # The per-command env prefix sets them for jq's process; the inputs also
+  # arrive EXPORTED in this script's env (the installer sets them), so they
+  # are `unset` right after this block — before the bundle-POST python3
+  # child below — so that child never inherits owner PII. Only the non-PII
+  # autodetected timezone is passed via --arg. Mirrors the example's shape: single owner,
   # one primary calendar, the example's real calendar_nudge lookahead
   # defaults; optional sections (partner, extra calendars, long-lead)
   # omitted.
@@ -201,6 +202,13 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   echo "" >&2
   echo "ld-config assembled + landed at $LD_CONFIG (timezone: $LD_TIMEZONE)." >&2
 fi
+
+# The three operator inputs arrive EXPORTED in this script's environment (the
+# installer sets them to assemble the config). Clear them now — before the
+# bundle-POST python3 child below — so owner PII is not inherited into that
+# child's environment. Unconditional: harmless on the preserve path (which
+# never used them), and bash-3.2-safe.
+unset LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT
 
 # Pre-POST gate: refuse to activate scheduled bundles unless the landed
 # config passes the structural gate. NAMES the failing invariant, never
