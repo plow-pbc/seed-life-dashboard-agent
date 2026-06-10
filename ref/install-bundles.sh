@@ -301,19 +301,31 @@ echo "" >&2
 # scheduler doesn't watch the file) — the agent turn is the only correct path.
 # Best-effort + verified; never fails the install (bundles/config/secrets are
 # the install contract).
-API_TOKEN_FILE="$APP_SUPPORT/plow-api-token"
+API_TOKEN_FILE="$SECRETS_DIR/plow-api-token"   # same secrets dir as plow-local-token / the VM's /config/secrets
 CRON_JOBS="$APP_SUPPORT/agent-runtime/gateway/cron/jobs.json"
 CRON_MSG='Please set up the three life-dashboard recurring cron jobs now: ld-morning-updates, ld-morning-triage, and ld-weekly-digest. For each, read /workspace/skills/<name>/SKILL.md and follow its Scheduling section plus /workspace/AGENTS.md § Self-managed crons, then create the job with cron action=add (schedule, delivery announce/plow-imessage, contextMessages, payload as specified there; tz = family.timezone from /config/runtime/ld/config.json). ld-calendar-nudge and ld-weather are already scheduled and need no cron. Reply with cron action=list when done.'
 cron_ok=""
 if [ -r "$API_TOKEN_FILE" ] && \
    MSG="$CRON_MSG" TOKEN_FILE="$API_TOKEN_FILE" python3 - <<'PY'
 import json, os, sys, urllib.error, urllib.request
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Same posture as the bundle POST above: a 30x from the inbound
+    endpoint must NOT replay the bearer to the redirect target."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"unexpected redirect to {newurl} — refusing to forward Authorization",
+            headers, fp,
+        )
+
 tok = open(os.environ["TOKEN_FILE"]).read().strip()
 body = json.dumps({"text": os.environ["MSG"]}).encode()
+opener = urllib.request.build_opener(_NoRedirect())
 req = urllib.request.Request("https://api.plow.co/channels/linq/inbound", data=body,
     method="POST", headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
 try:
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with opener.open(req, timeout=30) as r:
         ok = json.load(r).get("delivered") is True
 except Exception as e:
     sys.exit(f"cron-setup inbound POST failed: {e}")
@@ -321,19 +333,26 @@ sys.exit(0 if ok else "cron-setup: agent runtime offline (delivered != true)")
 PY
 then
   echo "cron-setup message delivered — waiting for the agent to register the three crons..." >&2
+  # Each job must be present, ENABLED, and on its expected schedule expr — so a
+  # missing, disabled, or wrong-cadence job does not pass. tz/contextMessages/
+  # delivery/payload are confirmed by the authoritative agent-side
+  # `cron action=list` (SEED.md § Verification step 5); the host can't check
+  # payloads without duplicating each bundle's SKILL.md here.
+  CRON_EXPECT='{"ld-morning-updates":"0 7 * * *","ld-morning-triage":"5 7 * * *","ld-weekly-digest":"0 7 * * 4"}'
   for _ in $(seq 1 18); do          # ~3 min: registration rides an async agent turn
-    if [ -f "$CRON_JOBS" ] \
-       && n=$(jq -r '.. | .name? // empty' "$CRON_JOBS" 2>/dev/null) \
-       && printf '%s\n' "$n" | grep -qx 'ld-morning-updates' \
-       && printf '%s\n' "$n" | grep -qx 'ld-morning-triage' \
-       && printf '%s\n' "$n" | grep -qx 'ld-weekly-digest'; then
+    if [ -f "$CRON_JOBS" ] && jq -e --argjson want "$CRON_EXPECT" '
+        ((.jobs // .) | (if type=="array" then . else [.[]] end)) as $jobs
+        | all(($want | to_entries)[]; . as $w
+              | any($jobs[]; .name == $w.key and .enabled == true
+                            and ((.schedule.expr // .schedule) == $w.value)))
+      ' "$CRON_JOBS" >/dev/null 2>&1; then
       cron_ok=1; break
     fi
     sleep 10
   done
 fi
 if [ -n "$cron_ok" ]; then
-  echo "  crons registered: ld-morning-updates, ld-morning-triage, ld-weekly-digest (authoritative check: cron action=list)" >&2
+  echo "  crons registered + enabled on the expected schedules: ld-morning-updates, ld-morning-triage, ld-weekly-digest (full payload/delivery/contextMessages check: cron action=list)" >&2
 else
   echo "" >&2
   echo "NOTE: could not confirm the three agent crons registered (runtime offline or slow)." >&2
