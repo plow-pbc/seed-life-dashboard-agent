@@ -107,8 +107,9 @@ printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
 
-# 6. Assemble + land ld-config from the three operator inputs on first
-#    install ONLY; preserve a gate-passing operator-edited config on
+# 6. Assemble + land ld-config from the one required input
+#    (LD_OWNER_IMESSAGE) plus the derived display name and calendar
+#    account on first install ONLY; preserve a gate-passing operator-edited config on
 #    re-runs (the operator's edits are canonical). The ONE exception:
 #    a landed file that still FAILS the gate is re-assembled from the
 #    inputs, so a corrected rerun is not short-circuited by "file
@@ -164,7 +165,7 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   esac
   case "${LD_CALENDAR_ACCOUNT:-}" in
     *[![:space:]]*) ;;
-    *) echo "LD_CALENDAR_ACCOUNT could not be derived (the handle is not an email) — set LD_CALENDAR_ACCOUNT to the account that owns the primary calendar" >&2; exit 1 ;;
+    *) echo "LD_CALENDAR_ACCOUNT is blank or could not be derived (the handle is not an email) — set LD_CALENDAR_ACCOUNT to the account that owns the primary calendar" >&2; exit 1 ;;
   esac
 
   # Autodetect IANA timezone: everything after the last /zoneinfo/ in
@@ -228,7 +229,7 @@ FAILS=$(ld_config_gate "$LD_CONFIG")
 if [ -n "$FAILS" ]; then
   echo "" >&2
   echo "ld-config at $LD_CONFIG does NOT pass the structural gate: $FAILS" >&2
-  echo "NOT installed — bundles NOT posted. Re-run with the three LD_* inputs set." >&2
+  echo "NOT installed — bundles NOT posted. Re-run with LD_OWNER_IMESSAGE set (name and calendar account are derived)." >&2
   exit 1
 fi
 
