@@ -181,10 +181,10 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   # Assemble. The PII values (owner name/handle, calendar account) reach
   # jq ONLY through the environment, read inside the filter via the `env`
   # builtin — NEVER on argv, so they never surface in /proc/<pid>/cmdline.
-  # The per-command env prefix sets them for jq's process; the inputs also
-  # arrive EXPORTED in this script's env (the installer sets them), so they
-  # are `unset` right after this block — before the bundle-POST python3
-  # child below — so that child never inherits owner PII. Only the non-PII
+  # The per-command env prefix sets them for jq's process only; whichever of
+  # these the installer exported into this script's env are cleared right
+  # after this block (see the `unset` comment below) so the bundle-POST
+  # python3 child never inherits owner PII. Only the non-PII
   # autodetected timezone is passed via --arg. Mirrors the example's shape: single owner,
   # one primary calendar, the example's real calendar_nudge lookahead
   # defaults; optional sections (partner, extra calendars, long-lead)
