@@ -215,11 +215,11 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   echo "ld-config assembled + landed at $LD_CONFIG (timezone: $LD_TIMEZONE)." >&2
 fi
 
-# The three operator inputs arrive EXPORTED in this script's environment (the
-# installer sets them to assemble the config). Clear them now — before the
-# bundle-POST python3 child below — so owner PII is not inherited into that
-# child's environment. Unconditional: harmless on the preserve path (which
-# never used them), and bash-3.2-safe.
+# LD_OWNER_IMESSAGE arrives EXPORTED from the installer; LD_OWNER_NAME /
+# LD_CALENDAR_ACCOUNT may also be exported as overrides (otherwise derived).
+# Clear all three now — before the bundle-POST python3 child below — so owner
+# PII is not inherited into that child's environment. Unconditional: harmless
+# on the preserve path (which never used them), and bash-3.2-safe.
 unset LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT
 
 # Pre-POST gate: refuse to activate scheduled bundles unless the landed
