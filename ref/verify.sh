@@ -51,26 +51,29 @@ declare -a probes=(
 # Bundle install location varies by plowd build:
 #   - current builds install to ~/Plow/skills/
 #   - v2 container builds use containers/<agent-UUID>/workspace[/host]/skills/
-# Resolve by probing candidate roots for ld-shared's marker file. The list is
-# built directly — current host root first, then any container workspace via
-# glob — with no index.json/UUID resolver: that resolver's `ls … | grep … |
+# Resolve by probing candidate roots for ALL of the bundle marker files. The
+# list is built directly — current host root first, then any container workspace
+# via glob — with no index.json/UUID resolver: that resolver's `ls … | grep … |
 # head` could exit non-zero under `set -euo pipefail` on a current build with no
 # containers/ dir and abort BEFORE ~/Plow/skills is ever checked. An unmatched
-# glob stays literal and simply fails the `-f` test, falling through.
-MARKER="${probes[0]}"   # single source of truth for the bundle marker file
+# glob stays literal and simply fails the `-f` test, falling through (this holds
+# under bash's default globbing — no nullglob/failglob is set in this script).
+#
+# A candidate is accepted only when EVERY probe resolves under it, so a stale or
+# partial root (e.g. a leftover ld-shared marker beside a complete container
+# install) is skipped rather than locked in and then failing the per-probe loop.
 WORKSPACE_SKILLS=""
 for cand in "$HOME/Plow/skills" \
             "$CONTAINERS_DIR"/*/workspace/skills \
             "$CONTAINERS_DIR"/*/workspace/host/skills; do
-  [ -f "$cand/$MARKER" ] && { WORKSPACE_SKILLS="$cand"; break; }
+  complete=1
+  for p in "${probes[@]}"; do
+    [ -f "$cand/$p" ] || { complete=0; break; }
+  done
+  [ "$complete" = "1" ] && { WORKSPACE_SKILLS="$cand"; break; }
 done
 [ -n "$WORKSPACE_SKILLS" ] \
   || { echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2; exit 1; }
-
-for p in "${probes[@]}"; do
-  [ -f "$WORKSPACE_SKILLS/$p" ] \
-    || { echo "FAIL v-bundles: $WORKSPACE_SKILLS/$p missing" >&2; exit 1; }
-done
 echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 
 # v3: dry-run a wrapper. We use the host-side vendored copy here — same
