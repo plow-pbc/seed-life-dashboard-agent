@@ -36,6 +36,12 @@ const DASH_TOKEN_PATH = "/config/secrets/dashboard-token";
 const NWS_USER_AGENT =
   "seed-life-dashboard ld-weather (https://github.com/plow-pbc/seed-life-dashboard-agent)";
 
+// /points returns the next two fetch targets (forecast + forecastHourly); pin
+// them to the NWS host so a malformed/compromised response can't steer an
+// outbound GET elsewhere. Combined with redirect:"error" on every NWS fetch,
+// the runner only ever talks to api.weather.gov.
+const NWS_BASE = "https://api.weather.gov/";
+
 // NOTE (rule-of-3): minuteInTz / readTrimmed / postKiosk are mirrored from
 // ld-calendar-nudge/scheduled/run.js. Two Pattern-B bundles now share these
 // idioms; when a third lands, extract them into a shared scheduled helper
@@ -76,6 +82,7 @@ async function readTrimmed(readFile, path) {
 async function fetchJson(fetchImpl, url, label) {
   const resp = await fetchImpl(url, {
     headers: { "User-Agent": NWS_USER_AGENT, Accept: "application/geo+json" },
+    redirect: "error", // stay on api.weather.gov; never follow a 3xx elsewhere
   });
   if (!resp.ok) throw new Error(`${label} ${resp.status}`);
   return resp.json();
@@ -94,6 +101,9 @@ async function resolveForecastUrls(fetchImpl, lat, lon) {
   const hourly = points?.properties?.forecastHourly;
   if (typeof daily !== "string" || typeof hourly !== "string") {
     throw new Error("NWS points: missing forecast URLs");
+  }
+  if (!daily.startsWith(NWS_BASE) || !hourly.startsWith(NWS_BASE)) {
+    throw new Error("NWS points: forecast URLs are off-host");
   }
   return { daily, hourly };
 }
@@ -144,14 +154,16 @@ async function run(opts = {}) {
   const text = composeWeather(location, hourlyBody, dailyBody);
 
   if (opts.dryRun) {
-    log("dry_run", { text });
+    // Body-free stderr; the manual-run path (require.main) prints the line to
+    // stdout for the operator. Keeps household location out of runner logs.
+    log("dry_run");
     return { dryRun: true, text };
   }
 
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
   await postKiosk(fetchImpl, dashUrl, dashToken, text);
-  log("weather_posted", { text });
+  log("weather_posted"); // body-free — the card text carries household location
   return { posted: true, text };
 }
 

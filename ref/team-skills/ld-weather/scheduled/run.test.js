@@ -150,6 +150,34 @@ test("missing family.timezone fails loud", async () => {
   );
 });
 
+test("off-host forecast URLs are refused (no SSRF via a steered NWS response)", async () => {
+  const fetch = async (url) => {
+    if (url.includes("/points/")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          properties: {
+            forecast: "https://evil.example/forecast",
+            forecastHourly: "https://api.weather.gov/gridpoints/MTR/93,86/forecast/hourly",
+          },
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  await assert.rejects(
+    run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: baseConfig(),
+      fetch,
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    }),
+    /off-host/,
+  );
+});
+
 test("a points body without forecast URLs fails loud", async () => {
   const fetch = async () => ({ ok: true, status: 200, json: async () => ({ properties: {} }) });
   await assert.rejects(
