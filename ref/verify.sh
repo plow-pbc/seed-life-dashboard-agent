@@ -63,17 +63,34 @@ declare -a probes=(
 # partial root (e.g. a leftover ld-shared marker beside a complete container
 # install) is skipped rather than locked in and then failing the per-probe loop.
 WORKSPACE_SKILLS=""
+BEST_CAND=""        # first root where ANY probe matched — the closest partial
+BEST_MISSING=""     # that root's first missing probe
 for cand in "$HOME/Plow/skills" \
             "$CONTAINERS_DIR"/*/workspace/skills \
             "$CONTAINERS_DIR"/*/workspace/host/skills; do
   complete=1
+  matched=0
+  missing=""
   for p in "${probes[@]}"; do
-    [ -f "$cand/$p" ] || { complete=0; break; }
+    if [ -f "$cand/$p" ]; then
+      matched=1
+    else
+      complete=0
+      [ -n "$missing" ] || missing="$p"
+    fi
   done
   [ "$complete" = "1" ] && { WORKSPACE_SKILLS="$cand"; break; }
+  # Remember the first root that matched at least one probe but not all.
+  [ -z "$BEST_CAND" ] && [ "$matched" = "1" ] && { BEST_CAND="$cand"; BEST_MISSING="$missing"; }
 done
-[ -n "$WORKSPACE_SKILLS" ] \
-  || { echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2; exit 1; }
+[ -n "$WORKSPACE_SKILLS" ] || {
+  if [ -n "$BEST_CAND" ]; then
+    echo "FAIL v-bundles: no complete root; closest was $BEST_CAND (missing $BEST_MISSING)" >&2
+  else
+    echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2
+  fi
+  exit 1
+}
 echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 
 # v3: dry-run a wrapper. We use the host-side vendored copy here — same
