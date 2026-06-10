@@ -63,7 +63,7 @@ declare -a probes=(
 # partial root (e.g. a leftover ld-shared marker beside a complete container
 # install) is skipped rather than locked in and then failing the per-probe loop.
 WORKSPACE_SKILLS=""
-BEST_CAND=""        # first root where ANY probe matched — the closest partial
+BEST_CAND=""        # first root where ANY probe matched (probe order, not most-matches)
 BEST_MISSING=""     # that root's first missing probe
 for cand in "$HOME/Plow/skills" \
             "$CONTAINERS_DIR"/*/workspace/skills \
@@ -85,7 +85,7 @@ for cand in "$HOME/Plow/skills" \
 done
 [ -n "$WORKSPACE_SKILLS" ] || {
   if [ -n "$BEST_CAND" ]; then
-    echo "FAIL v-bundles: no complete root; closest was $BEST_CAND (missing $BEST_MISSING)" >&2
+    echo "FAIL v-bundles: no complete root; first partial root was $BEST_CAND (missing $BEST_MISSING)" >&2
   else
     echo "FAIL v-bundles: ld-* bundles not found (checked ~/Plow/skills and container workspaces)" >&2
   fi
