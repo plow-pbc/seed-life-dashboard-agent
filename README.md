@@ -4,12 +4,12 @@
 
 A SEED that installs the six `ld-*` "life-dashboard" agent skill bundles into a local Plow:
 
-- `ld-shared` — the shared `post_to_kiosk.py` helper required by every `ld-*` bundle.
+- `ld-shared` — the shared `post_to_kiosk.py` POST helper for the **wrapper-based** bundles (alert/message/digest). Pattern-B scheduled jobs (`ld-calendar-nudge`, `ld-weather`) post directly from their `scheduled/run.js` and don't use it.
 - `ld-calendar-nudge` — cron-driven calendar nudges.
 - `ld-morning-triage` — daily morning email triage cards.
 - `ld-morning-updates` — daily good-morning summary cards.
 - `ld-weekly-digest` — weekly digest cards.
-- `ld-weather` — hourly weather card (current temp + today's high/low + condition) from the National Weather Service.
+- `ld-weather` — hourly weather card (current temp + forecast high/low + condition) from the National Weather Service.
 
 This repo is the source-of-truth for the six `ld-*` bundles — they live at `ref/team-skills/` and are authored and fixed here. The install POSTs each bundle to plowd's `/marketplace/api/install-local-bundles` endpoint (the same path `just sync-team-skills` uses); plowd does atomic-swap-with-rollback into the agent's skills root — `~/Plow/skills/` on current builds, or a container workspace (`containers/<UUID>/workspace[/host]/skills/`) on v2 builds.
 

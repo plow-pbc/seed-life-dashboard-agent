@@ -1,13 +1,15 @@
 ---
 name: ld-weather
-description: The life-dashboard kiosk's hourly weather card — current temperature, today's high/low, and a short condition for the configured location, from the National Weather Service. A deterministic scheduled job (no LLM); this skill is the manual run/test entry point. Use when the user asks to run, test, or set up the kiosk weather card.
+description: The life-dashboard kiosk's hourly weather card — current temperature, the forecast high/low, and a short condition for the configured location, from the National Weather Service. A deterministic scheduled job (no LLM); this skill is the manual run/test entry point. Use when the user asks to run, test, or set up the kiosk weather card.
 ---
 
 # Life Dashboard — Weather
 
-The kiosk's weather card: current temperature, today's high and low, and a
-one- or two-word condition for the configured location, refreshed hourly
-from the National Weather Service. **This is a deterministic scheduled job,
+The kiosk's weather card: current temperature, the forecast high and low,
+and a one- or two-word condition for the configured location, refreshed
+hourly from the National Weather Service. (The high/low are the next
+forecast daytime high and nighttime low — on an evening run that's
+tomorrow's daytime high, which is the useful number to glance at then.) **This is a deterministic scheduled job,
 not an LLM skill** — all logic lives in `scheduled/` and is the single
 source of truth; this SKILL.md does not restate the transform.
 
