@@ -4,7 +4,7 @@
 
 A SEED that installs the six `ld-*` "life-dashboard" agent skill bundles into a local Plow:
 
-- `ld-shared` — the shared `post_to_kiosk.py` POST helper for the **wrapper-based** bundles (alert/message/digest). Pattern-B scheduled jobs (`ld-calendar-nudge`, `ld-weather`) post directly from their `scheduled/run.js` and don't use it.
+- `ld-shared` — the shared `post_to_kiosk.py` POST helper used by the **wrapper-based** post scripts (`post_alert.py` / `post_message.py` / `post_digest.py` / `post_nudge.py`). The Pattern-B scheduled runners (`ld-weather`, and `ld-calendar-nudge`'s `scheduled/run.js`) post directly instead.
 - `ld-calendar-nudge` — cron-driven calendar nudges.
 - `ld-morning-triage` — daily morning email triage cards.
 - `ld-morning-updates` — daily good-morning summary cards.
