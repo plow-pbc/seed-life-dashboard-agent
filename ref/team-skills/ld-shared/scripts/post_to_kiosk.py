@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""post_to_kiosk.py — shared POST helper for the ld- life-dashboard bundles.
+"""post_to_kiosk.py — shared POST helper for the WRAPPER-BASED ld- bundles.
 
-Each ld- bundle ships a tiny wrapper (`post_message.py`, `post_alert.py`,
-`post_digest.py`, `post_nudge.py`) that sets two module-level constants
-and calls `main()`. The wrapper is the only file the cron invokes; this
-module is never on the agent's invocation path directly. That keeps the
-no-CLI-content security model intact: the bundle-specific `MESSAGE_FILE`
-path lives in the wrapper (one fixed string per bundle), not on the
-command line.
+Each wrapper-based ld- bundle ships a tiny wrapper (`post_message.py`,
+`post_alert.py`, `post_digest.py`, `post_nudge.py`) that sets two
+module-level constants and calls `main()`. The wrapper is the only file the
+cron/agent invokes; this module is never on the agent's invocation path
+directly. That keeps the no-CLI-content security model intact: the
+bundle-specific `MESSAGE_FILE` path lives in the wrapper (one fixed string
+per bundle), not on the command line.
+
+The Pattern-B *scheduled* runners post to the kiosk directly from their
+`scheduled/run.js` (same https-only, no-redirect, fail-loud posture, in JS),
+not via this helper: `ld-weather` posts only that way (no wrapper at all),
+and `ld-calendar-nudge` is a hybrid — its scheduled `run.js` posts directly
+while it still ships `post_nudge.py` for its manual reminder path (which
+uses this helper).
 
 Read from fixed paths the caller cannot redirect — not from argv, not from
 the environment:
