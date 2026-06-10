@@ -293,10 +293,51 @@ echo "             in one transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
 echo "  ld-config resolved at $LD_CONFIG" >&2
 echo "" >&2
-echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
-echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
-echo "'cron action=add' verb after install — message your Plow agent to" >&2
-echo "set up the morning-updates / morning-triage / weekly-digest crons" >&2
-echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge and" >&2
-echo "ld-weather use plowd's auto-activated scheduled/ entrypoint and need" >&2
-echo "no manual setup." >&2
+# Register the three agent-driven crons by driving the agent itself — the
+# supported "tell Plow" inbound seam (POST /channels/linq/inbound, Bearer
+# plow-api-token via stdin so it never lands in argv). The agent reads each
+# bundle's SKILL.md § Scheduling + AGENTS.md § Self-managed crons and runs
+# cron action=add. Hand-writing cron/jobs.json does NOT register (the live
+# scheduler doesn't watch the file) — the agent turn is the only correct path.
+# Best-effort + verified; never fails the install (bundles/config/secrets are
+# the install contract).
+API_TOKEN_FILE="$APP_SUPPORT/plow-api-token"
+CRON_JOBS="$APP_SUPPORT/agent-runtime/gateway/cron/jobs.json"
+CRON_MSG='Please set up the three life-dashboard recurring cron jobs now: ld-morning-updates, ld-morning-triage, and ld-weekly-digest. For each, read /workspace/skills/<name>/SKILL.md and follow its Scheduling section plus /workspace/AGENTS.md § Self-managed crons, then create the job with cron action=add (schedule, delivery announce/plow-imessage, contextMessages, payload as specified there; tz = family.timezone from /config/runtime/ld/config.json). ld-calendar-nudge and ld-weather are already scheduled and need no cron. Reply with cron action=list when done.'
+cron_ok=""
+if [ -r "$API_TOKEN_FILE" ] && \
+   MSG="$CRON_MSG" TOKEN_FILE="$API_TOKEN_FILE" python3 - <<'PY'
+import json, os, sys, urllib.error, urllib.request
+tok = open(os.environ["TOKEN_FILE"]).read().strip()
+body = json.dumps({"text": os.environ["MSG"]}).encode()
+req = urllib.request.Request("https://api.plow.co/channels/linq/inbound", data=body,
+    method="POST", headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+try:
+    with urllib.request.urlopen(req, timeout=30) as r:
+        ok = json.load(r).get("delivered") is True
+except Exception as e:
+    sys.exit(f"cron-setup inbound POST failed: {e}")
+sys.exit(0 if ok else "cron-setup: agent runtime offline (delivered != true)")
+PY
+then
+  echo "cron-setup message delivered — waiting for the agent to register the three crons..." >&2
+  for _ in $(seq 1 18); do          # ~3 min: registration rides an async agent turn
+    if [ -f "$CRON_JOBS" ] \
+       && n=$(jq -r '.. | .name? // empty' "$CRON_JOBS" 2>/dev/null) \
+       && printf '%s\n' "$n" | grep -qx 'ld-morning-updates' \
+       && printf '%s\n' "$n" | grep -qx 'ld-morning-triage' \
+       && printf '%s\n' "$n" | grep -qx 'ld-weekly-digest'; then
+      cron_ok=1; break
+    fi
+    sleep 10
+  done
+fi
+if [ -n "$cron_ok" ]; then
+  echo "  crons registered: ld-morning-updates, ld-morning-triage, ld-weekly-digest (authoritative check: cron action=list)" >&2
+else
+  echo "" >&2
+  echo "NOTE: could not confirm the three agent crons registered (runtime offline or slow)." >&2
+  echo "Finish by messaging your Plow agent: \"set up the ld-morning-updates," >&2
+  echo "ld-morning-triage, and ld-weekly-digest crons per each bundle's SKILL.md § Scheduling.\"" >&2
+  echo "(ld-calendar-nudge and ld-weather auto-recur via scheduled/ and need no cron.)" >&2
+fi
