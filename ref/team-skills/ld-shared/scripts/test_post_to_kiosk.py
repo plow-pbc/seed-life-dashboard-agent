@@ -234,24 +234,13 @@ def test_unset_message_file_or_body_type_fails_fast():
         check("unset BODY_TYPE exits non-zero", code != 0)
 
 
-def test_http_endpoint_accepted():
-    """http:// is now accepted — the Pi backend rides the household LAN/tailnet,
-    not the public internet, so plain http is the documented, accepted trade-off."""
-    server, base = _start_capturing_server()
-    try:
-        with tempfile.TemporaryDirectory() as d:
-            write_fixtures(Path(d), endpoint=f"{base}/api/message")
-            code, _ = run()
-    finally:
-        server.shutdown()
-    check("http:// endpoint exits zero", code == 0)
-    check("server received exactly one POST for http:// URL", len(_CapturingHandler.received) == 1)
-
-
 def test_non_http_schemes_rejected_with_no_token_leak():
     """ftp:// and garbage schemes must fail fast — only http(s):// is allowed.
-    Guards against a tampered endpoint file pointing to an unsupported scheme."""
-    for scheme_url in ("ftp://attacker.test/api/message", "notaurl", ""):
+    Guards against a tampered endpoint file pointing to an unsupported scheme.
+    (http:// acceptance is pinned by test_live_post_hits_endpoint_with_correct_payload,
+    whose capturing server is plain http; the empty-endpoint case lives in
+    test_missing_or_empty_inputs_fail_fast.)"""
+    for scheme_url in ("ftp://attacker.test/api/message", "notaurl"):
         with tempfile.TemporaryDirectory() as d:
             write_fixtures(Path(d), endpoint=scheme_url)
             code, out = run("--dry-run")
@@ -345,7 +334,6 @@ def main():
     test_non_200_exits_non_zero_and_keeps_handoff_file()
     test_missing_or_empty_inputs_fail_fast()
     test_unset_message_file_or_body_type_fails_fast()
-    test_http_endpoint_accepted()
     test_non_http_schemes_rejected_with_no_token_leak()
     test_redirect_not_followed()
     test_wrapper_contracts()
