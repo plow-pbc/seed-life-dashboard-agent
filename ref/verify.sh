@@ -19,9 +19,13 @@ done
 echo "OK   v-secrets"
 
 # v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL.
+# Mirror the runtime consumers' read (edge-trim only — read_required's .strip()
+# preserves embedded whitespace), so a multi-line or space-corrupted file fails
+# here exactly as it would at POST time, instead of being normalized clean.
 _ep_file="$SECRETS_DIR/dashboard-endpoint-url"
-_ep_val=$(tr -d '[:space:]' < "$_ep_file")
-if ! printf '%s' "$_ep_val" | grep -qE '^https?://.+/api/message$'; then
+_ep_val=$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' "$_ep_file")
+if [ "$(grep -c '[^[:space:]]' "$_ep_file")" -ne 1 ] \
+  || ! printf '%s' "$_ep_val" | grep -qE '^https?://[^[:space:]]+/api/message$'; then
   echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL" >&2
   exit 1
 fi
