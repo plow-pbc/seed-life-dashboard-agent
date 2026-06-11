@@ -66,10 +66,6 @@ PLOWD_URL="http://127.0.0.1:$PLOWD_PORT/marketplace/api/install-local-bundles"
 #    rides the household LAN/tailnet, not the public internet.
 ENDPOINT_URL="${DASHBOARD_ENDPOINT_URL:?DASHBOARD_ENDPOINT_URL not set — full /api/message URL of the Pi backend}"
 : "${DASHBOARD_TOKEN:?DASHBOARD_TOKEN not set — bearer the Pi message API validates}"
-case "$DASHBOARD_TOKEN" in
-  *[![:space:]]*) ;;  # contains a non-whitespace char
-  *) echo "DASHBOARD_TOKEN is blank" >&2; exit 1 ;;
-esac
 case "$ENDPOINT_URL" in
   http://*|https://*) ;;
   *) echo "DASHBOARD_ENDPOINT_URL is not http(s)://" >&2; exit 1 ;;
@@ -78,11 +74,10 @@ case "$ENDPOINT_URL" in
   */api/message) ;;
   *) echo "DASHBOARD_ENDPOINT_URL must be the FULL message-API URL ending in /api/message" >&2; exit 1 ;;
 esac
-case "$ENDPOINT_URL" in
-  *[[:space:]]*) echo "DASHBOARD_ENDPOINT_URL must contain no whitespace" >&2; exit 1 ;;
-esac
-case "$DASHBOARD_TOKEN" in
-  *$'\n'*) echo "DASHBOARD_TOKEN must be single-line" >&2; exit 1 ;;
+# One shared rule: neither value may contain ANY whitespace (RFC 6750 bearer
+# tokens and URLs are both whitespace-free; the :? guards reject empty).
+case "$ENDPOINT_URL$DASHBOARD_TOKEN" in
+  *[[:space:]]*) echo "DASHBOARD_ENDPOINT_URL/DASHBOARD_TOKEN must contain no whitespace" >&2; exit 1 ;;
 esac
 
 # 5. Land dashboard secrets BEFORE bundle install — every ld-* bundle's

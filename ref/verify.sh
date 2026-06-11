@@ -32,10 +32,18 @@ fi
 unset _ep_file _ep_val
 echo "OK   v-endpoint-shape"
 
-# v-token-shape: dashboard-token must be a single non-blank line (the same
-# contract the installer enforces; checked without ever printing the value).
-[ "$(grep -c '[^[:space:]]' "$SECRETS_DIR/dashboard-token")" -eq 1 ] \
-  || { echo "FAIL v-token-shape: dashboard-token must be a single non-blank line" >&2; exit 1; }
+# v-token-shape: dashboard-token must be one non-blank line with no interior
+# whitespace (RFC 6750 bearer; the same predicate the installer enforces),
+# checked without ever printing the value — same edge-trim read as the
+# endpoint check above.
+_tok_file="$SECRETS_DIR/dashboard-token"
+_tok_val=$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' "$_tok_file")
+if [ "$(grep -c '[^[:space:]]' "$_tok_file")" -ne 1 ] \
+  || ! printf '%s' "$_tok_val" | grep -qE '^[^[:space:]]+$'; then
+  echo "FAIL v-token-shape: dashboard-token must be a single whitespace-free line" >&2
+  exit 1
+fi
+unset _tok_file _tok_val
 echo "OK   v-token-shape"
 
 # v1b: ld-config present + parses as JSON + passes the minimal
