@@ -21,10 +21,13 @@ echo "OK   v-secrets"
 # v-endpoint-shape / v-token-shape: the secret files are whitespace-FREE by
 # contract (SEED.md; the installer rejects the same bytes before mutation, and
 # writes verbatim with no trailing newline). Verify certifies that written
-# contract — no edge-trim leniency — and never prints either value. v-secrets
-# above already guarantees both files are non-empty.
+# contract — no edge-trim leniency — and never prints either value. The check
+# is BYTE-level (grep is line-oriented and cannot see \n, the most likely
+# corruption): whitespace-free ⇔ raw size equals the [:space:]-stripped size.
+# v-secrets above already guarantees both files are non-empty.
+ws_free() { [ "$(wc -c < "$1")" -eq "$(tr -d '[:space:]' < "$1" | wc -c)" ]; }
 _ep_file="$SECRETS_DIR/dashboard-endpoint-url"
-if grep -q '[[:space:]]' "$_ep_file" \
+if ! ws_free "$_ep_file" \
   || ! grep -qE '^https?://[^[:space:]]+/api/message$' "$_ep_file"; then
   echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a whitespace-free http(s)://…/api/message URL" >&2
   exit 1
@@ -32,7 +35,7 @@ fi
 unset _ep_file
 echo "OK   v-endpoint-shape"
 
-if grep -q '[[:space:]]' "$SECRETS_DIR/dashboard-token"; then
+if ! ws_free "$SECRETS_DIR/dashboard-token"; then
   echo "FAIL v-token-shape: dashboard-token must be whitespace-free (RFC 6750 bearer)" >&2
   exit 1
 fi
