@@ -32,11 +32,11 @@ This SEED's five operator-supplied values: two endpoint inputs and three househo
 | input | Owner's iMessage handle — an E.164 phone (`+15551234567`) or an email address | preflight | `LD_OWNER_IMESSAGE` | |
 | input | Account that owns the primary calendar (e.g. `sam@example.com`) | preflight | `LD_CALENDAR_ACCOUNT` | |
 
-Run the following block to assemble + land the household config, land the secrets, and install the bundles. The three `LD_*` inputs above MUST be in the environment when it runs (the installer exports them from the preflight answers; a hand-run sets them inline as shown) — on first install the script assembles `ld-config` from them and exits non-zero if any is missing. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
+Run the following block to assemble + land the household config, land the secrets, and install the bundles. All five inputs above MUST be in the environment when it runs (the installer exports them from the preflight answers; a hand-run sets them inline as shown) — on first install the script assembles `ld-config` from them and exits non-zero if any is missing. The block is idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-with-rollback), rewrites the two secret files, and preserves a gate-passing `ld-config`.
 
 ```bash
 set -euo pipefail
-export LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT   # set from the Requirements above
+export DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT   # all five from the Requirements above
 bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ```
 
