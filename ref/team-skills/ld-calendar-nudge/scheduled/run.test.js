@@ -155,3 +155,52 @@ test("missing family.timezone throws", async () => {
     /family\.timezone missing/,
   );
 });
+
+// In-window with qualifying event, using an http:// dashUrl (Pi backend on household LAN/tailnet).
+test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", async () => {
+  const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, body: init && init.body });
+    if (url.includes("/calendar.events.list")) {
+      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+    }
+    return { ok: true, async json() { return {}; } };
+  };
+  const res = await run({
+    now,
+    fetch: fetchImpl,
+    config: baseConfig(),
+    apiUrl: "https://api.test",
+    apiToken: "tok",
+    dashUrl: "http://rpi5screen:5174/api/message",
+    dashToken: "dtok",
+  });
+  assert.equal(res.sent, true);
+  assert.ok(calls.some((c) => c.url === "http://rpi5screen:5174/api/message"));
+});
+
+test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
+  const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+  const fetchImpl = async (url) => {
+    if (url.includes("/calendar.events.list")) {
+      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+    }
+    return { ok: true, async json() { return {}; } };
+  };
+  for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
+    await assert.rejects(
+      run({
+        now,
+        fetch: fetchImpl,
+        config: baseConfig(),
+        apiUrl: "https://api.test",
+        apiToken: "tok",
+        dashUrl: badUrl,
+        dashToken: "dtok",
+      }),
+      /must be http\(s\):\/\//,
+      `expected rejection for ${badUrl}`,
+    );
+  }
+});

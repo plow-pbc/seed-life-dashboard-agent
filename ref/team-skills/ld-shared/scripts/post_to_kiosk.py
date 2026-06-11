@@ -10,7 +10,7 @@ bundle-specific `MESSAGE_FILE` path lives in the wrapper (one fixed string
 per bundle), not on the command line.
 
 The Pattern-B *scheduled* runners post to the kiosk directly from their
-`scheduled/run.js` (same https-only, no-redirect, fail-loud posture, in JS),
+`scheduled/run.js` (same http(s)-allowed, no-redirect, fail-loud posture, in JS),
 not via this helper: `ld-weather` posts only that way (no wrapper at all),
 and `ld-calendar-nudge` is a hybrid — its scheduled `run.js` posts directly
 while it still ships `post_nudge.py` for its manual reminder path (which
@@ -55,7 +55,9 @@ BODY_TYPE: str | None = None
 # Shared across all ld- bundles.
 ENDPOINT_FILE = "/config/secrets/dashboard-endpoint-url"
 TOKEN_FILE = "/config/secrets/dashboard-token"
-REQUIRED_URL_PREFIX = "https://"
+# The Pi backend rides the household LAN/tailnet, not the public internet —
+# http:// is an accepted trade-off for that trust zone.
+REQUIRED_URL_PREFIXES = ("http://", "https://")
 
 
 def read_required(path, label):
@@ -106,8 +108,8 @@ def main():
 
     text = read_required(MESSAGE_FILE, f"{BODY_TYPE} text file")
     url = read_required(ENDPOINT_FILE, "endpoint file")
-    if not url.startswith(REQUIRED_URL_PREFIX):
-        sys.exit(f"error: endpoint URL must start with {REQUIRED_URL_PREFIX!r}, got: {url}")
+    if not any(url.startswith(p) for p in REQUIRED_URL_PREFIXES):
+        sys.exit(f"error: endpoint URL must start with http:// or https://, got: {url}")
     token = read_required(TOKEN_FILE, "token file")
 
     body = {"type": BODY_TYPE, "text": text}

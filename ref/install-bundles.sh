@@ -66,9 +66,17 @@ PLOWD_URL="http://127.0.0.1:$PLOWD_PORT/marketplace/api/install-local-bundles"
 #    rides the household LAN/tailnet, not the public internet.
 ENDPOINT_URL="${DASHBOARD_ENDPOINT_URL:?DASHBOARD_ENDPOINT_URL not set — full /api/message URL of the Pi backend}"
 : "${DASHBOARD_TOKEN:?DASHBOARD_TOKEN not set — bearer the Pi message API validates}"
+case "$DASHBOARD_TOKEN" in
+  *[![:space:]]*) ;;  # contains a non-whitespace char
+  *) echo "DASHBOARD_TOKEN is blank" >&2; exit 1 ;;
+esac
 case "$ENDPOINT_URL" in
   http://*|https://*) ;;
   *) echo "DASHBOARD_ENDPOINT_URL is not http(s)://" >&2; exit 1 ;;
+esac
+case "$ENDPOINT_URL" in
+  */api/message) ;;
+  *) echo "DASHBOARD_ENDPOINT_URL must be the FULL message-API URL ending in /api/message" >&2; exit 1 ;;
 esac
 case "$ENDPOINT_URL$DASHBOARD_TOKEN" in
   *$'\n'*) echo "DASHBOARD_ENDPOINT_URL/DASHBOARD_TOKEN must be single-line" >&2; exit 1 ;;
@@ -95,6 +103,10 @@ TMP=$(mktemp "$SECRETS_DIR/.dashboard-token.XXXXXX")
 printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
+# Clear the secrets from the environment after landing them — same pattern as
+# the LD_* operator inputs below. The ld-config assembly + bundle-POST python3
+# child have no use for these values; secret files are the canonical handoff.
+unset DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN
 
 # 6. Assemble + land ld-config from the three operator inputs on first
 #    install ONLY; preserve a gate-passing operator-edited config on

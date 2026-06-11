@@ -58,7 +58,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 - `DASHBOARD_ENDPOINT_URL` — the FULL message-API URL (e.g. `http://rpi5screen:5174/api/message`). Written verbatim to `dashboard-endpoint-url` — no `/api/message` append. `http://` is allowed: the Pi endpoint rides the household LAN/tailnet; with a Tailscale hostname the path is encrypted on the wire, and plaintext-LAN otherwise is a documented, accepted trade-off.
 - `DASHBOARD_TOKEN` — the bearer the Pi message API validates. Written verbatim to `dashboard-token`.
-- Validation (performed BEFORE any plowd mutation): both must be non-empty, `DASHBOARD_ENDPOINT_URL` must begin with `http://` or `https://`, and both must be single-line (no embedded newlines).
+- Validation (performed BEFORE any plowd mutation): both must be non-blank (rejects whitespace-only), `DASHBOARD_ENDPOINT_URL` must begin with `http://` or `https://` AND end with `/api/message` (fail-fast on old base-URL shape), and both must be single-line (no embedded newlines).
 
 ### ld-config
 
@@ -81,7 +81,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 - The install action MUST read `DASHBOARD_ENDPOINT_URL` and `DASHBOARD_TOKEN` from the environment (failing fast if either is absent or invalid — without them the bundles have no endpoint to post to) and atomically write `dashboard-endpoint-url` and `dashboard-token` to `<app_support>/agent-runtime/secrets/` at mode 600 via mktemp+rename. Values flow through the environment and a tempfile — never echoed, never on argv. The mktemp lives inside `SECRETS_DIR` (not `$TMPDIR`) so the final `mv` is a same-filesystem atomic rename.
 - `DASHBOARD_ENDPOINT_URL` is written VERBATIM — it is already the full `/api/message` URL; no path is appended.
-- The install action MUST validate `DASHBOARD_ENDPOINT_URL` (http(s)://, single-line, non-empty) and `DASHBOARD_TOKEN` (single-line, non-empty) BEFORE any plowd mutation. A malformed input must fail fast — never land a partial install where bundles run against unknown credentials.
+- The install action MUST validate `DASHBOARD_ENDPOINT_URL` (http(s)://, must end with `/api/message`, single-line, non-blank) and `DASHBOARD_TOKEN` (single-line, non-blank — rejects whitespace-only) BEFORE any plowd mutation. A malformed input must fail fast — never land a partial install where bundles run against unknown credentials.
 
 ### ld-config is landed
 

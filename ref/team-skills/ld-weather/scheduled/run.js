@@ -109,8 +109,10 @@ async function resolveForecastUrls(fetchImpl, lat, lon) {
 }
 
 async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  if (!dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be https://");
+  // The Pi backend rides the household LAN/tailnet, not the public internet —
+  // http:// is an accepted trade-off for that trust zone.
+  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
+    throw new Error("kiosk POST: dashboard URL must be http(s)://");
   }
   const resp = await fetchImpl(dashUrl, {
     method: "POST",
