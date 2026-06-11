@@ -58,7 +58,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 - `DASHBOARD_ENDPOINT_URL` — the FULL message-API URL (e.g. `http://rpi5screen:5174/api/message`). Written verbatim to `dashboard-endpoint-url` — no `/api/message` append. `http://` is allowed: the Pi endpoint rides the household LAN/tailnet; with a Tailscale hostname the path is encrypted on the wire, and plaintext-LAN otherwise is a documented, accepted trade-off.
 - `DASHBOARD_TOKEN` — the bearer the Pi message API validates. Written verbatim to `dashboard-token`.
-- Validation (performed BEFORE any plowd mutation): both must be non-blank (rejects whitespace-only), `DASHBOARD_ENDPOINT_URL` must begin with `http://` or `https://` AND end with `/api/message` (fail-fast on old base-URL shape), and both must be single-line (no embedded newlines).
+- Validation (performed BEFORE any plowd mutation): both must be non-empty and **entirely whitespace-free** — one shared predicate (RFC 6750 bearers and URLs carry no whitespace, which subsumes single-line) — and `DASHBOARD_ENDPOINT_URL` must begin with `http://` or `https://` AND end with `/api/message` (fail-fast on the old base-URL shape). `ref/verify.sh` re-asserts the same predicates post-install.
 
 ### ld-config
 
