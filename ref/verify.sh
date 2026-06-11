@@ -18,6 +18,16 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
+# v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL.
+_ep_file="$SECRETS_DIR/dashboard-endpoint-url"
+_ep_val=$(tr -d '[:space:]' < "$_ep_file")
+if ! printf '%s' "$_ep_val" | grep -qE '^https?://.+/api/message$'; then
+  echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL" >&2
+  exit 1
+fi
+unset _ep_file _ep_val
+echo "OK   v-endpoint-shape"
+
 # v1b: ld-config present + parses as JSON + passes the minimal
 # structural gate. This is the SAME gate install-bundles.sh enforces
 # pre-mutation (SEED.md ## Actions > minimal structural gate), so

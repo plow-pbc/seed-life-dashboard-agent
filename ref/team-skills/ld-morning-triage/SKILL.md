@@ -49,7 +49,7 @@ Once per morning:
 6. Post it via `scripts/post_alert.py`.
 
 This skill only posts the scheduled morning alert. It does not manage
-the dashboard, the Raspberry Pi, or the Vercel backend. It never
+the dashboard or the Raspberry Pi. It never
 replies to messages, marks-as-read, or archives — read-only on every
 upstream source.
 

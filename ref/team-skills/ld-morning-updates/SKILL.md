@@ -29,7 +29,7 @@ Once per morning:
 4. Post it to the kiosk with `scripts/post_message.py`.
 
 This skill only posts the scheduled morning message. It does not manage the
-dashboard, the Raspberry Pi, or the Vercel backend.
+dashboard or the Raspberry Pi.
 
 ## Requirements
 
@@ -39,8 +39,9 @@ This skill requires Plow — it uses Plow's calendar and iMessage tools:
 - `plow_imessage_analytics` — one bulk SQL read of recent messages.
 - `plow_imessage_thread` — sparing follow-up read of a single thread.
 
-It also needs the message API from the `life-dashboard` project deployed to
-Vercel, and the bearer token at `/config/secrets/dashboard-token`.
+It also needs the household Pi's dashboard server (kiosk message API): the
+endpoint URL at `/config/secrets/dashboard-endpoint-url` and the bearer
+token at `/config/secrets/dashboard-token`.
 
 **To fork off-Plow**: rewrite the Gather context section below to retarget
 `plow_calendar_search` and `plow_imessage_analytics` / `plow_imessage_thread`
