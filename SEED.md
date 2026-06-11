@@ -81,7 +81,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 - The install action MUST read `DASHBOARD_ENDPOINT_URL` and `DASHBOARD_TOKEN` from the environment (failing fast if either is absent or invalid — without them the bundles have no endpoint to post to) and atomically write `dashboard-endpoint-url` and `dashboard-token` to `<app_support>/agent-runtime/secrets/` at mode 600 via mktemp+rename. Values flow through the environment and a tempfile — never echoed, never on argv. The mktemp lives inside `SECRETS_DIR` (not `$TMPDIR`) so the final `mv` is a same-filesystem atomic rename.
 - `DASHBOARD_ENDPOINT_URL` is written VERBATIM — it is already the full `/api/message` URL; no path is appended.
-- The install action MUST validate `DASHBOARD_ENDPOINT_URL` (http(s)://, must end with `/api/message`, single-line, non-blank) and `DASHBOARD_TOKEN` (single-line, non-blank — rejects whitespace-only) BEFORE any plowd mutation. A malformed input must fail fast — never land a partial install where bundles run against unknown credentials.
+- The install action MUST validate both inputs per the [Endpoint inputs](#endpoint-inputs) predicates BEFORE any plowd mutation. A malformed input must fail fast — never land a partial install where bundles run against unknown credentials.
 
 ### ld-config is landed
 
