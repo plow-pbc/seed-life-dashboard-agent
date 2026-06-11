@@ -78,8 +78,11 @@ case "$ENDPOINT_URL" in
   */api/message) ;;
   *) echo "DASHBOARD_ENDPOINT_URL must be the FULL message-API URL ending in /api/message" >&2; exit 1 ;;
 esac
-case "$ENDPOINT_URL$DASHBOARD_TOKEN" in
-  *$'\n'*) echo "DASHBOARD_ENDPOINT_URL/DASHBOARD_TOKEN must be single-line" >&2; exit 1 ;;
+case "$ENDPOINT_URL" in
+  *[[:space:]]*) echo "DASHBOARD_ENDPOINT_URL must contain no whitespace" >&2; exit 1 ;;
+esac
+case "$DASHBOARD_TOKEN" in
+  *$'\n'*) echo "DASHBOARD_TOKEN must be single-line" >&2; exit 1 ;;
 esac
 
 # 5. Land dashboard secrets BEFORE bundle install — every ld-* bundle's

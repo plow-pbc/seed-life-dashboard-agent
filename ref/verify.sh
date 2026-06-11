@@ -32,6 +32,12 @@ fi
 unset _ep_file _ep_val
 echo "OK   v-endpoint-shape"
 
+# v-token-shape: dashboard-token must be a single non-blank line (the same
+# contract the installer enforces; checked without ever printing the value).
+[ "$(grep -c '[^[:space:]]' "$SECRETS_DIR/dashboard-token")" -eq 1 ] \
+  || { echo "FAIL v-token-shape: dashboard-token must be a single non-blank line" >&2; exit 1; }
+echo "OK   v-token-shape"
+
 # v1b: ld-config present + parses as JSON + passes the minimal
 # structural gate. This is the SAME gate install-bundles.sh enforces
 # pre-mutation (SEED.md ## Actions > minimal structural gate), so
