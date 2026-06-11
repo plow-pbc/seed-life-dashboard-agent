@@ -11,20 +11,23 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 API / per-machine state:
 
 - A Mac running macOS with `Plow.app` installed AND activated. Authored on macOS 26.4.1 / arm64. plowd MUST be running (the install POSTs to its local HTTP API).
-- A deployed life-dashboard relay (see `seed-life-dashboard-relay`'s [state file](https://github.com/plow-pbc/seed-life-dashboard-relay/blob/main/SEED.md#state-file)). This SEED reads the relay's state file to wire the bundles to the right endpoint+token.
+- The two env inputs `DASHBOARD_ENDPOINT_URL` and `DASHBOARD_TOKEN` must be set before install (see [Requirements](#requirements)). They point at the household's Pi message API; this SEED does NOT depend on or deploy any relay — the umbrella SEED (`seed-life-dashboard`) derives and exports both values before recursing into this SEED.
 
 Software:
 
 - `https://github.com/plow-pbc/seed-plow-app` — installs Plow.app and activates it. Provides its [activation verify check](https://github.com/plow-pbc/seed-plow-app/blob/main/SEED.md#verify) (the `plow-api-token` post-condition); also lands the `plow-local-token` this SEED uses to authenticate to plowd's marketplace endpoint.
-- `https://github.com/plow-pbc/seed-life-dashboard-relay` — deploys the Vercel relay and writes the state file consumed below.
 - System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`. No install needed.
 
 ### Requirements
 
-This SEED's three operator-supplied values — the household facts it [assembles `config.json` from](#ld-config). All are `kind: input`, `phase: preflight` (collectible before install); the env-var name lives in `satisfy`. The installer unions all preflight inputs across the dependency tree and asks them ONCE up front — this SEED only DECLARES them, it does not collect them. `family.timezone` is **autodetected** from the host (`readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`) and is therefore NOT an input.
+This SEED's five operator-supplied values: two endpoint inputs and three household facts it [assembles `config.json` from](#ld-config). All are `kind: input`, `phase: preflight` (collectible before install); the env-var name lives in `satisfy`. The installer unions all preflight inputs across the dependency tree and asks them ONCE up front — this SEED only DECLARES them, it does not collect them. `family.timezone` is **autodetected** from the host (`readlink /etc/localtime` → IANA, fallback `America/Los_Angeles`) and is therefore NOT an input.
+
+`DASHBOARD_ENDPOINT_URL` and `DASHBOARD_TOKEN` are normally derived and exported by the umbrella SEED (`seed-life-dashboard`) before recursing into this SEED, so on an umbrella install they are never collected from the operator. On a standalone install (running this SEED directly), they are collected as preflight inputs.
 
 | kind | label | phase | satisfy | bypass |
 |---|---|---|---|---|
+| input | Full `/api/message` URL of the Pi message API (e.g. `http://rpi5screen:5174/api/message`) | preflight | `DASHBOARD_ENDPOINT_URL` | |
+| input | Bearer the Pi message API validates | preflight | `DASHBOARD_TOKEN` | |
 | input | Household owner's display name (how the dashboard refers to you) | preflight | `LD_OWNER_NAME` | |
 | input | Owner's iMessage handle — an E.164 phone (`+15551234567`) or an email address | preflight | `LD_OWNER_IMESSAGE` | |
 | input | Account that owns the primary calendar (e.g. `sam@example.com`) | preflight | `LD_CALENDAR_ACCOUNT` | |
@@ -46,14 +49,16 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### Dashboard secrets
 
-- Two operator-supplied secret files under `~/Library/Application Support/co.plow.app/agent-runtime/secrets/`:
-  - `dashboard-endpoint-url` — the relay's HTTPS URL.
-  - `dashboard-token` — the bearer the relay validates.
+- Two env-derived secret files under `~/Library/Application Support/co.plow.app/agent-runtime/secrets/`:
+  - `dashboard-endpoint-url` — the full `/api/message` URL of the Pi message API.
+  - `dashboard-token` — the bearer the Pi message API validates.
 - Both mode 600, owner-only. plowd bind-mounts `agent-runtime/` into the agent VM at `/config/`, so the bundles read these at `/config/secrets/dashboard-{endpoint-url,token}` — the paths `ld-shared/scripts/post_to_kiosk.py` already hardcodes.
 
-### Relay state
+### Endpoint inputs
 
-- Read-only consumed: `~/Library/Application Support/seed-life-dashboard-relay/state.json` ([`seed-life-dashboard-relay`](https://github.com/plow-pbc/seed-life-dashboard-relay)'s [state file](https://github.com/plow-pbc/seed-life-dashboard-relay/blob/main/SEED.md#state-file)). This SEED does NOT write to it; only reads `endpoint_url` and `dashboard_token` and projects them into the [dashboard secrets](#dashboard-secrets).
+- `DASHBOARD_ENDPOINT_URL` — the FULL message-API URL (e.g. `http://rpi5screen:5174/api/message`). Written verbatim to `dashboard-endpoint-url` — no `/api/message` append. `http://` is allowed: the Pi endpoint rides the household LAN/tailnet; with a Tailscale hostname the path is encrypted on the wire, and plaintext-LAN otherwise is a documented, accepted trade-off.
+- `DASHBOARD_TOKEN` — the bearer the Pi message API validates. Written verbatim to `dashboard-token`.
+- Validation (performed BEFORE any plowd mutation): both must be non-empty, `DASHBOARD_ENDPOINT_URL` must begin with `http://` or `https://`, and both must be single-line (no embedded newlines).
 
 ### ld-config
 
@@ -74,8 +79,9 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### Dashboard secrets are landed
 
-- The install action MUST read the [relay state](#relay-state) (failing fast if absent — without it the bundles have no endpoint to post to) and atomically write `dashboard-endpoint-url` and `dashboard-token` to `<app_support>/agent-runtime/secrets/` at mode 600 via mktemp+rename. Values pass through `jq` and a tempfile — never echoed, never on argv. The mktemp lives inside `SECRETS_DIR` (not `$TMPDIR`) so the final `mv` is a same-filesystem atomic rename.
-- The install action MUST validate `endpoint_url` (HTTPS) and `dashboard_token` (non-empty) BEFORE any plowd mutation. A malformed relay state must fail fast — never land a partial install where bundles run against unknown credentials.
+- The install action MUST read `DASHBOARD_ENDPOINT_URL` and `DASHBOARD_TOKEN` from the environment (failing fast if either is absent or invalid — without them the bundles have no endpoint to post to) and atomically write `dashboard-endpoint-url` and `dashboard-token` to `<app_support>/agent-runtime/secrets/` at mode 600 via mktemp+rename. Values flow through the environment and a tempfile — never echoed, never on argv. The mktemp lives inside `SECRETS_DIR` (not `$TMPDIR`) so the final `mv` is a same-filesystem atomic rename.
+- `DASHBOARD_ENDPOINT_URL` is written VERBATIM — it is already the full `/api/message` URL; no path is appended.
+- The install action MUST validate `DASHBOARD_ENDPOINT_URL` (http(s)://, single-line, non-empty) and `DASHBOARD_TOKEN` (single-line, non-empty) BEFORE any plowd mutation. A malformed input must fail fast — never land a partial install where bundles run against unknown credentials.
 
 ### ld-config is landed
 
