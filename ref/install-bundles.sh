@@ -235,29 +235,6 @@ if [ -n "$FAILS" ]; then
   exit 1
 fi
 
-# 6c. Materialize ld-config where the RUNNING agent actually reads it. The
-#     agent container mounts /config/runtime from <app_support>/containers/
-#     <runtime-id>/config (per-container; NOT from agent-runtime/runtime), so
-#     the canonical copy above is what host tooling + ref/verify.sh read, but
-#     NOT what the agent reads — the ld-* skills AND the scheduled runner read
-#     /config/runtime/ld/config.json, which resolves to the per-container dir.
-#     Without this, every ld-* job (crons AND the scheduled weather/nudge) fails
-#     on first fire with a missing-config error. Copy into each active
-#     (role=agent, enabled) container's config dir, discovered from index.json.
-#     (Durable fix is plowd materializing the canonical ld-config into each
-#     agent container at provision time — see SEED.md Open Items.)
-CONTAINERS_DIR="$APP_SUPPORT/containers"
-if [ -f "$CONTAINERS_DIR/index.json" ]; then
-  for rid in $(jq -r '.containers[]? | select(.role == "agent" and .enabled == true) | .id' \
-               "$CONTAINERS_DIR/index.json" 2>/dev/null | tr 'A-Z' 'a-z'); do
-    cdir="$CONTAINERS_DIR/$rid/config"
-    [ -d "$cdir" ] || continue
-    mkdir -p "$cdir/ld"
-    cp -p "$LD_CONFIG" "$cdir/ld/config.json" && chmod 600 "$cdir/ld/config.json"
-    echo "  ld-config materialized into agent container $rid (→ /config/runtime/ld/config.json)." >&2
-  done
-fi
-
 # 7. POST ALL bundles in a single tarball + single Python call so
 #    plowd's marketplace endpoint sees one transaction (atomic
 #    rollback boundary). Matches plow4/justfile sync-team-skills shape.
@@ -364,10 +341,9 @@ then
   CRON_EXPECT='{"ld-morning-updates":"0 7 * * *","ld-morning-triage":"5 7 * * *","ld-weekly-digest":"0 7 * * 4"}'
   for _ in $(seq 1 18); do          # ~3 min: registration rides an async agent turn
     if [ -f "$CRON_JOBS" ] && jq -e --argjson want "$CRON_EXPECT" '
-        ((.jobs // .) | (if type=="array" then . else [.[]] end)) as $jobs
+        .jobs as $jobs
         | all(($want | to_entries)[]; . as $w
-              | any($jobs[]; .name == $w.key and .enabled == true
-                            and ((.schedule.expr // .schedule) == $w.value)))
+              | any($jobs[]; .name == $w.key and .enabled == true and .schedule.expr == $w.value))
       ' "$CRON_JOBS" >/dev/null 2>&1; then
       cron_ok=1; break
     fi
