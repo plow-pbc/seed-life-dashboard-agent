@@ -18,32 +18,24 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
-# v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL.
-# Mirror the runtime consumers' read (edge-trim only — read_required's .strip()
-# preserves embedded whitespace), so a multi-line or space-corrupted file fails
-# here exactly as it would at POST time, instead of being normalized clean.
+# v-endpoint-shape / v-token-shape: the secret files are whitespace-FREE by
+# contract (SEED.md; the installer rejects the same bytes before mutation, and
+# writes verbatim with no trailing newline). Verify certifies that written
+# contract — no edge-trim leniency — and never prints either value. v-secrets
+# above already guarantees both files are non-empty.
 _ep_file="$SECRETS_DIR/dashboard-endpoint-url"
-_ep_val=$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' "$_ep_file")
-if [ "$(grep -c '[^[:space:]]' "$_ep_file")" -ne 1 ] \
-  || ! printf '%s' "$_ep_val" | grep -qE '^https?://[^[:space:]]+/api/message$'; then
-  echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a single-line http(s)://…/api/message URL" >&2
+if grep -q '[[:space:]]' "$_ep_file" \
+  || ! grep -qE '^https?://[^[:space:]]+/api/message$' "$_ep_file"; then
+  echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a whitespace-free http(s)://…/api/message URL" >&2
   exit 1
 fi
-unset _ep_file _ep_val
+unset _ep_file
 echo "OK   v-endpoint-shape"
 
-# v-token-shape: dashboard-token must be one non-blank line with no interior
-# whitespace (RFC 6750 bearer; the same predicate the installer enforces),
-# checked without ever printing the value — same edge-trim read as the
-# endpoint check above.
-_tok_file="$SECRETS_DIR/dashboard-token"
-_tok_val=$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' "$_tok_file")
-if [ "$(grep -c '[^[:space:]]' "$_tok_file")" -ne 1 ] \
-  || ! printf '%s' "$_tok_val" | grep -qE '^[^[:space:]]+$'; then
-  echo "FAIL v-token-shape: dashboard-token must be a single whitespace-free line" >&2
+if grep -q '[[:space:]]' "$SECRETS_DIR/dashboard-token"; then
+  echo "FAIL v-token-shape: dashboard-token must be whitespace-free (RFC 6750 bearer)" >&2
   exit 1
 fi
-unset _tok_file _tok_val
 echo "OK   v-token-shape"
 
 # v1b: ld-config present + parses as JSON + passes the minimal
