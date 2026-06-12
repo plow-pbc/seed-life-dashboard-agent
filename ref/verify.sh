@@ -112,7 +112,7 @@ for p in "${probes[@]}"; do
 done
 echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 
-# v3: dry-run a wrapper. We use the host-side repo-local copy here — same
+# v3: dry-run the INSTALLED affirmation wrapper ($WORKSPACE_SKILLS) — same
 # wrapper code that's installed inside the VM, just executed from the
 # host with rebound module-level constants. This proves the secrets
 # resolve and the wrapper executes; it does NOT post over the network.
@@ -127,16 +127,18 @@ echo "hello from verify" > "$DRY_INPUT"
 # output goes to a private mktemp file (not a fixed world-readable
 # /tmp path) to avoid symlink/TOCTOU + concurrent-run collisions.
 DRY_RC=0
-SHARED_SCRIPTS="$SEED_ROOT/ref/team-skills/ld-shared/scripts" \
-WRAPPER_FILE="$SEED_ROOT/ref/team-skills/ld-morning-affirmation/scripts/post_affirmation.py" \
+SHARED_SCRIPTS="$WORKSPACE_SKILLS/ld-shared/scripts" \
+WRAPPER_FILE="$WORKSPACE_SKILLS/ld-morning-affirmation/scripts/post_affirmation.py" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
 DRY_INPUT="$DRY_INPUT" \
 python3 - >"$DRY_OUT" 2>&1 <<'PY' || DRY_RC=$?
-import os, sys, importlib.util, tempfile, pathlib
+import os, sys, importlib.util, tempfile
 
-# 1. Load post_to_kiosk into sys.modules FIRST so the wrapper's
-#    `import post_to_kiosk` resolves to this same module object.
+# 1. Load the INSTALLED post_to_kiosk into sys.modules FIRST so the
+#    wrapper's `import post_to_kiosk` resolves to this same module object.
+#    Both paths point at $WORKSPACE_SKILLS — verify proves the installed
+#    artifact, not the repo checkout.
 shared = os.environ["SHARED_SCRIPTS"]
 spec = importlib.util.spec_from_file_location(
     "post_to_kiosk",
@@ -146,53 +148,38 @@ mod = importlib.util.module_from_spec(spec)
 sys.modules["post_to_kiosk"] = mod
 spec.loader.exec_module(mod)
 
-# 2. Rebind host-side paths BEFORE the wrapper runs (wrapper overrides
-#    MESSAGE_FILE to its own bundle path — that is intentional: we write
-#    the fixture there so the wrapper is tested exactly as installed).
+# 2. Load the installed wrapper as a NAMED module (not __main__): its
+#    main() dispatch is guarded by `if __name__ == "__main__"`, so this
+#    sets MESSAGE_FILE / BODY_TYPE / DEFAULT_CARD on the shared module
+#    without running anything — the real wrapper's contract, verbatim.
+wrapper_spec = importlib.util.spec_from_file_location(
+    "post_affirmation",
+    os.environ["WRAPPER_FILE"],
+)
+wrapper_mod = importlib.util.module_from_spec(wrapper_spec)
+wrapper_spec.loader.exec_module(wrapper_mod)
+
+# 3. Rebind ONLY the host-side paths AFTER the wrapper has set its
+#    constants: secrets to the host secret files, MESSAGE_FILE to our
+#    private mktemp fixture (never the wrapper's fixed runtime handoff
+#    path — a pending retry handoff there must not be touched), and
+#    CONFIG_FILE to a nonexistent temp path so host config cannot
+#    influence card resolution (absent file -> DEFAULT_CARD).
 mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
 mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
-# Point CONFIG_FILE at a nonexistent temp path so host config cannot
-# influence card resolution (absent file -> fall through to DEFAULT_CARD).
+mod.MESSAGE_FILE = os.environ["DRY_INPUT"]
 cfg_dir = tempfile.mkdtemp()
 mod.CONFIG_FILE = os.path.join(cfg_dir, "no-such-config.json")
 
-# 3. Write the fixture text to the wrapper's expected MESSAGE_FILE path so
-#    the wrapper finds it when main() reads it. The path is fixed by the
-#    wrapper's hardcoded MESSAGE_FILE (world-writable /tmp), so the write is
-#    hardened: unlink any pre-existing entry, then O_EXCL|O_NOFOLLOW create
-#    at mode 600 — a pre-planted symlink fails loudly instead of redirecting
-#    the write (the same TOCTOU class the DRY_OUT mktemp note covers).
-wrapper_msg = "/tmp/ld-morning-affirmation-text"
-try:
-    os.unlink(wrapper_msg)
-except FileNotFoundError:
-    pass
-fd = os.open(wrapper_msg, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-with os.fdopen(fd, "w") as f:
-    f.write(pathlib.Path(os.environ["DRY_INPUT"]).read_text())
-
-# 4. Exec the wrapper as __main__ — it sets BODY_TYPE / DEFAULT_CARD on
-#    the shared module object, then calls post_to_kiosk.main(). --dry-run
-#    returns before the consume-side unlink, so the fixture is cleaned in
-#    the finally below (along with the mkdtemp dir) — no per-run litter.
-wrapper_spec = importlib.util.spec_from_file_location(
-    "__main__",
-    os.environ["WRAPPER_FILE"],
-)
+# 4. Dispatch exactly as the wrapper's __main__ block would.
 sys.argv = ["post_affirmation.py", "--dry-run"]
 try:
-    wrapper_mod = importlib.util.module_from_spec(wrapper_spec)
-    wrapper_spec.loader.exec_module(wrapper_mod)
+    mod.main()
 except SystemExit as e:
     # main() exits normally on --dry-run; a clean exit is fine
     if e.code not in (None, 0):
         raise
 finally:
-    # --dry-run never consumes the message file; clean both artifacts.
-    try:
-        os.unlink(wrapper_msg)
-    except FileNotFoundError:
-        pass
     os.rmdir(cfg_dir)
 PY
 if [ "$DRY_RC" != "0" ]; then

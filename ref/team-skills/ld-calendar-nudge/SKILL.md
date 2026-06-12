@@ -273,8 +273,10 @@ retry path that would otherwise substitute a misleading failure
 message) and is suppressed by `plow-imessage` (see
 `shouldSuppressDeliveredText` in
 `app/agent-runtime/channels/plow-imessage/src/channel.ts`), so it delivers
-nothing. The kiosk keeps whatever the last bundle posted until a newer
-post of the same type replaces it (there is no expiry).
+nothing. The kiosk keeps whatever was last posted to the same CARD slot until a
+newer post to that card replaces it (there is no expiry). This bundle
+targets card 2 by default — shared with the morning affirmation; latest
+post to the card wins.
 
 **Drift prose to avoid.** The channel suppresses only the *exact*
 token `[NOOP]` (after trim) on this outbound path — any other closure

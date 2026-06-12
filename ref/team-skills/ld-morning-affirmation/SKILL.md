@@ -183,9 +183,11 @@ Both files live in `/config/secrets/` (mode 0600), the credential seam
 turn cannot rewrite the endpoint to exfiltrate the bearer-token POST.
 It fails loudly on any non-200 response.
 
-The endpoint stores a single current message per type, so each post
-replaces the previous one. There is no expiry: the affirmation stays on the
-dashboard until the next day's post replaces it.
+The kiosk stores a single current message per CARD slot, so whatever
+posts to the same card next replaces it. This bundle targets card 2 —
+which `ld-calendar-nudge` also targets by default — so the affirmation
+stays on the dashboard until the next day's post OR an intervening nudge
+replaces it (there is no expiry; latest-to-card-2 wins).
 
 Preview the request envelope without sending it (body text is redacted
 to `<redacted, N chars>`; read `/tmp/ld-morning-affirmation-text`
