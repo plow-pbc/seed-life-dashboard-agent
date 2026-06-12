@@ -45,7 +45,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ### `ld-*` bundles
 
 - This repo is the **source-of-truth** for the six `ld-*` skill bundles — they live under `ref/team-skills/ld-*/` and are authored and fixed here. There is no upstream the copies track; a fix to bundle behavior lands in this repo.
-- The six installed bundle directories `ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest,weather}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/skills/ld-<name>/`, which is the path the agent reads.
+- The six installed bundle directories `ld-{calendar-nudge,morning-affirmation,morning-triage,shared,weekly-digest,weather}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/skills/ld-<name>/`, which is the path the agent reads.
 
 ### Dashboard secrets
 
@@ -53,6 +53,19 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
   - `dashboard-endpoint-url` — the full `/api/message` URL of the Pi message API.
   - `dashboard-token` — the bearer the Pi message API validates.
 - Both mode 600, owner-only. plowd bind-mounts `agent-runtime/` into the agent VM at `/config/`, so the bundles read these at `/config/secrets/dashboard-{endpoint-url,token}` — the paths `ld-shared/scripts/post_to_kiosk.py` already hardcodes.
+
+### Kiosk POST body
+
+Every bundle posts `{"card": "<slot>", "type": "<type>", "text": "<message>"}` (all three fields required, non-empty strings). The kiosk renders numbered card slots left-to-right: **1** = top-left, **2** = top-middle, **3** = top-right, **4** = bottom full-width.
+
+`card` is resolved at post time in priority order:
+
+1. `config.json → dashboard.card_targets.<type>` — optional per-household override.
+2. Each producer's built-in default: `alert→"1"`, `affirmation→"2"`, `weather→"3"`, `digest→"4"`, `nudge→"2"`.
+
+The fail-fast rule: if neither resolves to a non-empty string, the post helper exits non-zero with a clear message — no silent mismatch. The `dashboard.card_targets` section in `config.json` is fully optional; code defaults apply when it is absent. See `ref/team-skills/ld-shared/references/config.example.json` for the shape.
+
+The endpoint+token contract (the `/api/message` URL and bearer) is unchanged — `card`/`type`/`text` are message-body fields, not a new secret or endpoint path.
 
 ### Endpoint inputs
 
@@ -123,7 +136,7 @@ A deterministic bash implementation lives at [`ref/verify.sh`](ref/verify.sh).
 ## Open Items
 
 - **plowd port discovery.** Today we replicate `plow4/justfile`'s pattern. A pinned, plowd-published port file would make this SEED's install simpler.
-- **Cron registration for three of the six bundles.** `ld-calendar-nudge` and `ld-weather` use plowd's `scheduled/` auto-activated entrypoint and recur immediately on install. The other three (`ld-morning-updates`, `ld-morning-triage`, `ld-weekly-digest`) require Plow's **agent-side** `cron action=add` verb to register their daily/weekly recurrences — that's a runtime action only the agent can perform, not a host-side install step this SEED can drive. Operators MUST message Plow after install with "set up the morning-updates / morning-triage / weekly-digest crons" (the agent reads each bundle's `SKILL.md § Scheduling` and runs the right `cron action=add`). The install script surfaces this as a loud post-install note. v2 destination: restructure the three bundles to use plowd's `scheduled/` entrypoint (a bundle change in this repo, deferred — not part of the install contract).
+- **Cron registration for three of the six bundles.** `ld-calendar-nudge` and `ld-weather` use plowd's `scheduled/` auto-activated entrypoint and recur immediately on install. The other three (`ld-morning-affirmation`, `ld-morning-triage`, `ld-weekly-digest`) require Plow's **agent-side** `cron action=add` verb to register their daily/weekly recurrences — that's a runtime action only the agent can perform, not a host-side install step this SEED can drive. Operators MUST message Plow after install with "set up the morning-affirmation / morning-triage / weekly-digest crons" (the agent reads each bundle's `SKILL.md § Scheduling` and runs the right `cron action=add`). The install script surfaces this as a loud post-install note. v2 destination: restructure the three bundles to use plowd's `scheduled/` entrypoint (a bundle change in this repo, deferred — not part of the install contract).
 - **Bundled vs registry-pulled.** The bundles' source lives in this repo; v1 ships them by bundling the copies into the install archive. Eventually a Plow marketplace registry serving signed bundles would replace the bundle-into-archive step (the source would still live here, just be published to the registry rather than POSTed directly). v2 candidate.
 
 ## Non-Goals

@@ -35,5 +35,15 @@
     "location": "Mountain View",
     "lat": 37.386,
     "lon": -122.083
+  },
+  "dashboard": {
+    "_comment": "card_targets: optional per-type overrides for the kiosk card slot. Cards are numbered left-to-right: 1=top-left, 2=top-middle, 3=top-right, 4=bottom-full-width. Omit a key to use each producer's built-in default (alert→1, affirmation→2, weather→3, digest→4, nudge→2).",
+    "card_targets": {
+      "alert": "1",
+      "affirmation": "2",
+      "weather": "3",
+      "digest": "4",
+      "nudge": "2"
+    }
   }
 }

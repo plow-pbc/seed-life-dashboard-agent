@@ -242,7 +242,7 @@ fi
 #    no-redirect opener prevents plowd from forwarding Authorization
 #    to another target on an upstream 30x — same pattern as
 #    ld-shared/scripts/post_to_kiosk.py:_NoRedirect.
-BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather)
+BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-affirmation ld-weekly-digest ld-weather)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
     echo "missing bundle: $bundle" >&2
@@ -288,15 +288,15 @@ trap - EXIT
 echo "" >&2
 echo "Agent installed:" >&2
 echo "  6 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
-echo "             ld-morning-updates, ld-weekly-digest, ld-weather) posted" >&2
+echo "             ld-morning-affirmation, ld-weekly-digest, ld-weather) posted" >&2
 echo "             in one transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
 echo "  ld-config resolved at $LD_CONFIG" >&2
 echo "" >&2
-echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
+echo "NOTE: three of the bundles (ld-morning-affirmation, ld-morning-triage," >&2
 echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
 echo "'cron action=add' verb after install — message your Plow agent to" >&2
-echo "set up the morning-updates / morning-triage / weekly-digest crons" >&2
+echo "set up the morning-affirmation / morning-triage / weekly-digest crons" >&2
 echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge and" >&2
 echo "ld-weather use plowd's auto-activated scheduled/ entrypoint and need" >&2
 echo "no manual setup." >&2

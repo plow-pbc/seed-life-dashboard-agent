@@ -81,7 +81,7 @@ mornings, and late evenings.
 ## Privacy boundary — non-negotiable
 
 The digest is delivered to the kiosk, a shared display in the home; a child
-may read it. Same rule as `ld-morning-updates`: skip medical, private, or
+may read it. Same rule as `ld-morning-affirmation`: skip medical, private, or
 sensitive titles AND locations entirely (don't generalize, don't paraphrase
 — omit). When in doubt, omit. The block-by-day rendering counts as a
 single calendar slot, so "Wed — 2 appointments" with the slot otherwise

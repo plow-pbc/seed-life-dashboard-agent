@@ -125,7 +125,7 @@ function qualifyingEvents(events, opts) {
 
     // All-day events have only `start.date`; without `start.date_time`
     // we can't compute a meaningful minutes_until, and they're handled
-    // by morning-updates / weekly-digest instead.
+    // by morning-affirmation / weekly-digest instead.
     const startDt = evt?.start?.date_time;
     if (typeof startDt !== "string" || startDt.length === 0) continue;
 
