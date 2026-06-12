@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """post_to_kiosk.py — shared POST helper for the WRAPPER-BASED ld- bundles.
 
-Each wrapper-based ld- bundle ships a tiny wrapper (`post_message.py`,
-`post_alert.py`, `post_digest.py`, `post_nudge.py`) that sets two
+Each wrapper-based ld- bundle ships a tiny wrapper (`post_affirmation.py`,
+`post_alert.py`, `post_digest.py`, `post_nudge.py`) that sets three
 module-level constants and calls `main()`. The wrapper is the only file the
 cron/agent invokes; this module is never on the agent's invocation path
 directly. That keeps the no-CLI-content security model intact: the
@@ -29,13 +29,20 @@ Caller contract:
 
     import post_to_kiosk
     post_to_kiosk.MESSAGE_FILE = "/tmp/ld-<bundle>-text"
-    post_to_kiosk.BODY_TYPE = "alert" | "digest" | "message" | "nudge"
+    post_to_kiosk.BODY_TYPE = "alert" | "affirmation" | "digest" | "nudge"
+    post_to_kiosk.DEFAULT_CARD = "1"  # per-bundle built-in card slot
     post_to_kiosk.main()
+
+Card resolution at post time:
+  1. Read CONFIG_FILE (config.json) → dashboard.card_targets[BODY_TYPE] if present.
+  2. Else fall back to DEFAULT_CARD.
+  3. Fail fast (non-zero exit) if neither resolves to a non-empty string.
 
 `--dry-run` always redacts the body text to `<redacted, N chars>` — some
 bundles paraphrase private mail/iMessage bodies and the operator can read
 MESSAGE_FILE directly to verify exact text, so the dry-run output stays
-non-sensitive across all bundles.
+non-sensitive across all bundles. `card` is NOT secret and IS shown in
+dry-run output.
 """
 
 from __future__ import annotations
@@ -51,10 +58,12 @@ from pathlib import Path
 # Bundle-specific — wrapper sets these before calling main().
 MESSAGE_FILE: str | None = None
 BODY_TYPE: str | None = None
+DEFAULT_CARD: str | None = None
 
 # Shared across all ld- bundles.
 ENDPOINT_FILE = "/config/secrets/dashboard-endpoint-url"
 TOKEN_FILE = "/config/secrets/dashboard-token"
+CONFIG_FILE = "/config/runtime/ld/config.json"
 # The Pi backend rides the household LAN/tailnet, not the public internet —
 # http:// is an accepted trade-off for that trust zone.
 REQUIRED_URL_PREFIXES = ("http://", "https://")
@@ -74,6 +83,34 @@ def read_required(path, label):
     if not value:
         sys.exit(f"error: {label} is empty: {path}")
     return value
+
+
+def _resolve_card(body_type: str) -> str:
+    """Resolve the card slot for the current bundle.
+
+    Resolution order:
+      1. config.json → dashboard.card_targets[body_type] (optional override)
+      2. DEFAULT_CARD (bundle built-in)
+    Fails fast with a clear message if neither resolves to a non-empty string.
+    """
+    # Try config.json first.
+    try:
+        raw = Path(CONFIG_FILE).read_text()
+        cfg = json.loads(raw)
+        card = cfg.get("dashboard", {}).get("card_targets", {}).get(body_type)
+        if isinstance(card, str) and card.strip():
+            return card.strip()
+    except (OSError, json.JSONDecodeError):
+        pass  # config absent or malformed → fall through to DEFAULT_CARD
+
+    if isinstance(DEFAULT_CARD, str) and DEFAULT_CARD.strip():
+        return DEFAULT_CARD.strip()
+
+    sys.exit(
+        f"error: no card slot resolved for type={body_type!r}: "
+        f"set dashboard.card_targets.{body_type} in config.json "
+        f"or set DEFAULT_CARD in the wrapper"
+    )
 
 
 def _no_redirect_opener():
@@ -106,19 +143,24 @@ def main():
     )
     args = parser.parse_args()
 
+    # Resolve card before reading secrets — a missing card is a config error,
+    # not a credential error, and surfaces a clearer message first.
+    card = _resolve_card(BODY_TYPE)
+
     text = read_required(MESSAGE_FILE, f"{BODY_TYPE} text file")
     url = read_required(ENDPOINT_FILE, "endpoint file")
     if not any(url.startswith(p) for p in REQUIRED_URL_PREFIXES):
         sys.exit(f"error: endpoint URL must start with http:// or https://, got: {url}")
     token = read_required(TOKEN_FILE, "token file")
 
-    body = {"type": BODY_TYPE, "text": text}
+    body = {"card": card, "type": BODY_TYPE, "text": text}
 
     if args.dry_run:
         # Always redact the body text — some bundles paraphrase private
         # mail/iMessage content, and a single redaction policy across all
         # bundles avoids a per-bundle privacy branch. The operator can read
         # MESSAGE_FILE directly to verify exact text.
+        # card is NOT secret — shown as-is in dry-run output.
         print(
             json.dumps(
                 {
