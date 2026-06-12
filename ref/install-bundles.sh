@@ -168,7 +168,7 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
       *) LD_TIMEZONE="" ;;
     esac
     [ -n "$LD_TIMEZONE" ] || LD_TIMEZONE="America/Los_Angeles"
-  elif [ ! -e "/usr/share/zoneinfo/$LD_TIMEZONE" ]; then
+  elif [ ! -f "/usr/share/zoneinfo/$LD_TIMEZONE" ]; then
     # The autodetect path is zoneinfo-derived by construction; the
     # override path must fail loud on a typo'd zone, never land it —
     # a wrong zone silently shifts every scheduled send by hours.
