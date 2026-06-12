@@ -82,8 +82,36 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   const post = fetch.calls.find((c) => c.opts.method === "POST");
   assert.ok(post, "a kiosk POST happened");
   assert.equal(post.opts.redirect, "error");
-  assert.deepEqual(JSON.parse(post.opts.body), { type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.deepEqual(JSON.parse(post.opts.body), { card: "3", type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
+});
+
+test("card defaults to '3' when no config override", async () => {
+  const fetch = fakeFetch();
+  await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: baseConfig(), // no dashboard.card_targets
+    fetch,
+    dashUrl: "https://kiosk.example/api/message",
+    dashToken: "tok",
+  });
+  const post = fetch.calls.find((c) => c.opts.method === "POST");
+  assert.ok(post, "a kiosk POST happened");
+  assert.equal(JSON.parse(post.opts.body).card, "3");
+});
+
+test("dashboard.card_targets.weather overrides default card", async () => {
+  const fetch = fakeFetch();
+  await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: { ...baseConfig(), dashboard: { card_targets: { weather: "1" } } },
+    fetch,
+    dashUrl: "https://kiosk.example/api/message",
+    dashToken: "tok",
+  });
+  const post = fetch.calls.find((c) => c.opts.method === "POST");
+  assert.ok(post, "a kiosk POST happened");
+  assert.equal(JSON.parse(post.opts.body).card, "1");
 });
 
 test("--force bypasses the gate off-cadence", async () => {

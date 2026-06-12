@@ -108,7 +108,7 @@ async function resolveForecastUrls(fetchImpl, lat, lon) {
   return { daily, hourly };
 }
 
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
+async function postKiosk(fetchImpl, dashUrl, dashToken, card, text) {
   // The Pi backend rides the household LAN/tailnet, not the public internet —
   // http:// is an accepted trade-off for that trust zone.
   if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
@@ -118,7 +118,7 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "weather", text }),
+    body: JSON.stringify({ card, type: "weather", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
@@ -162,9 +162,12 @@ async function run(opts = {}) {
     return { dryRun: true, text };
   }
 
+  // Resolve card slot: config override or built-in default "3".
+  const card = config?.dashboard?.card_targets?.weather ?? "3";
+
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, card, text);
   log("weather_posted"); // body-free — the card text carries household location
   return { posted: true, text };
 }
