@@ -102,22 +102,31 @@ test("null card_targets.weather falls back to default '3'", async () => {
 });
 
 test("present-but-invalid card_targets.weather throws (fail-loud)", async () => {
-  // Present non-null values that aren't a non-empty-trimmed string → throw.
-  for (const bad of ["", "  ", 3]) {
+  // Present non-null values that aren't a non-empty-trimmed string → throw;
+  // wrong-shape intermediate nodes (non-object dashboard / card_targets,
+  // including arrays) throw naming the offending node.
+  const cases = [
+    [{ card_targets: { weather: "" } }, /dashboard\.card_targets\.weather/],
+    [{ card_targets: { weather: "  " } }, /dashboard\.card_targets\.weather/],
+    [{ card_targets: { weather: 3 } }, /dashboard\.card_targets\.weather/],
+    ["x", /dashboard in config must be an object/],
+    [{ card_targets: [] }, /dashboard\.card_targets in config must be an object/],
+  ];
+  for (const [dashboard, expectRe] of cases) {
     await assert.rejects(
       () =>
         run({
           now: new Date("2026-06-09T22:00:00Z"),
-          config: { ...baseConfig(), dashboard: { card_targets: { weather: bad } } },
+          config: { ...baseConfig(), dashboard },
           fetch: fakeFetch(),
           dashUrl: "https://kiosk.example/api/message",
           dashToken: "tok",
         }),
       (err) => {
-        assert.match(String(err.message), /dashboard\.card_targets\.weather/);
+        assert.match(String(err.message), expectRe);
         return true;
       },
-      `expected throw for override ${JSON.stringify(bad)}`
+      `expected throw for dashboard ${JSON.stringify(dashboard)}`
     );
   }
 });

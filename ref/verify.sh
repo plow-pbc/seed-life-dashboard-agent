@@ -153,15 +153,28 @@ mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
 mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
 # Point CONFIG_FILE at a nonexistent temp path so host config cannot
 # influence card resolution (absent file -> fall through to DEFAULT_CARD).
-mod.CONFIG_FILE = os.path.join(tempfile.mkdtemp(), "no-such-config.json")
+cfg_dir = tempfile.mkdtemp()
+mod.CONFIG_FILE = os.path.join(cfg_dir, "no-such-config.json")
 
-# 3. Write the fixture text to the wrapper's expected MESSAGE_FILE path
-#    so the wrapper finds it when main() reads it.
+# 3. Write the fixture text to the wrapper's expected MESSAGE_FILE path so
+#    the wrapper finds it when main() reads it. The path is fixed by the
+#    wrapper's hardcoded MESSAGE_FILE (world-writable /tmp), so the write is
+#    hardened: unlink any pre-existing entry, then O_EXCL|O_NOFOLLOW create
+#    at mode 600 — a pre-planted symlink fails loudly instead of redirecting
+#    the write (the same TOCTOU class the DRY_OUT mktemp note covers).
 wrapper_msg = "/tmp/ld-morning-affirmation-text"
-pathlib.Path(wrapper_msg).write_text(pathlib.Path(os.environ["DRY_INPUT"]).read_text())
+try:
+    os.unlink(wrapper_msg)
+except FileNotFoundError:
+    pass
+fd = os.open(wrapper_msg, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+with os.fdopen(fd, "w") as f:
+    f.write(pathlib.Path(os.environ["DRY_INPUT"]).read_text())
 
 # 4. Exec the wrapper as __main__ — it sets BODY_TYPE / DEFAULT_CARD on
-#    the shared module object, then calls post_to_kiosk.main().
+#    the shared module object, then calls post_to_kiosk.main(). --dry-run
+#    returns before the consume-side unlink, so the fixture is cleaned in
+#    the finally below (along with the mkdtemp dir) — no per-run litter.
 wrapper_spec = importlib.util.spec_from_file_location(
     "__main__",
     os.environ["WRAPPER_FILE"],
@@ -174,6 +187,13 @@ except SystemExit as e:
     # main() exits normally on --dry-run; a clean exit is fine
     if e.code not in (None, 0):
         raise
+finally:
+    # --dry-run never consumes the message file; clean both artifacts.
+    try:
+        os.unlink(wrapper_msg)
+    except FileNotFoundError:
+        pass
+    os.rmdir(cfg_dir)
 PY
 if [ "$DRY_RC" != "0" ]; then
   echo "FAIL v-dry-run: wrapper exited non-zero ($DRY_RC)" >&2

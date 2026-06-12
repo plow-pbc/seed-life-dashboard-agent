@@ -250,15 +250,24 @@ test("null card_targets.nudge falls back to default '2'", async () => {
 });
 
 test("present-but-invalid card_targets.nudge throws (fail-loud)", async () => {
-  // Present non-null values that aren't a non-empty-trimmed string → throw.
-  for (const bad of ["", "  ", 2]) {
+  // Present non-null values that aren't a non-empty-trimmed string → throw;
+  // wrong-shape intermediate nodes (non-object dashboard / card_targets,
+  // including arrays) throw naming the offending node.
+  const cases = [
+    [{ card_targets: { nudge: "" } }, /dashboard\.card_targets\.nudge/],
+    [{ card_targets: { nudge: "  " } }, /dashboard\.card_targets\.nudge/],
+    [{ card_targets: { nudge: 2 } }, /dashboard\.card_targets\.nudge/],
+    ["x", /dashboard in config must be an object/],
+    [{ card_targets: [] }, /dashboard\.card_targets in config must be an object/],
+  ];
+  for (const [dashboard, expectRe] of cases) {
     await assert.rejects(
-      () => runWithCard({ dashboard: { card_targets: { nudge: bad } } }),
+      () => runWithCard({ dashboard }),
       (err) => {
-        assert.match(String(err.message), /dashboard\.card_targets\.nudge/);
+        assert.match(String(err.message), expectRe);
         return true;
       },
-      `expected throw for override ${JSON.stringify(bad)}`
+      `expected throw for dashboard ${JSON.stringify(dashboard)}`
     );
   }
 });
