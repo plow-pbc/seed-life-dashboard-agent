@@ -169,8 +169,11 @@ Ask for JSON output:
       "alert_text": "<≤115 chars, neutral voice, paraphrased — never quote message bodies verbatim>"
     }
 
-If the LLM returns malformed JSON or empty `alert_text`, retry once.
-If still bad, post nothing — never make up content.
+If the LLM returns malformed JSON, empty `alert_text`, or `alert_text`
+over 115 chars, retry once. If still malformed or empty, post nothing —
+never make up content. If still merely over-length, post it anyway: a
+clamped alert on the kiosk beats a dropped one (the viewer's line clamp
+is the backstop).
 
 ## Post
 
