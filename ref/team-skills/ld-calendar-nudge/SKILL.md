@@ -321,7 +321,8 @@ exceeds 115 chars it truncates the **variable** fields with an ellipsis
 `at <local_time> (<minutes_until>m)` portion (the actionable part).
 Never slice the whole composed line, which could drop the time. For the
 rare two-meetings-in-one-tick case, join them with a blank line in the
-same reminder text.
+same reminder text — the budget is per-event, so that rare card may
+still clip on the kiosk (the viewer's line clamp is the backstop).
 
 Then:
 
