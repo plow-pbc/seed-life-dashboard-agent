@@ -42,20 +42,28 @@ def check(label, condition):
 def run(*args):
     """Invoke post_to_kiosk.main() with the given CLI args.
 
-    Returns (exit_code, stdout_text).
+    Returns (exit_code, stdout_text, err_text). err_text carries both captured
+    stderr and a sys.exit(message) string (the interpreter would print that to
+    stderr; under this harness it travels in SystemExit.code).
     """
     out = io.StringIO()
+    err = io.StringIO()
     code = 0
     saved = sys.argv
     sys.argv = ["post_to_kiosk.py", *args]
     try:
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             post_to_kiosk.main()
     except SystemExit as exc:
-        code = exc.code if isinstance(exc.code, int) else 1
+        if isinstance(exc.code, int):
+            code = exc.code
+        else:
+            code = 1
+            if exc.code is not None:
+                err.write(str(exc.code))
     finally:
         sys.argv = saved
-    return code, out.getvalue()
+    return code, out.getvalue(), err.getvalue()
 
 
 def write_fixtures(
@@ -139,7 +147,7 @@ def test_live_post_hits_endpoint_with_correct_payload():
                 default_card="1",
             )
             # http:// is now accepted (Pi backend on household LAN/tailnet).
-            code, _ = run()
+            code, _, _err = run()
             handoff_consumed_after_success = not msg_file.exists()
     finally:
         server.shutdown()
@@ -167,7 +175,7 @@ def test_dry_run_redacts_body_and_token():
     distinctive_alert = "Stephanie asked about the proposal yesterday"
     with tempfile.TemporaryDirectory() as d:
         write_fixtures(Path(d), text=distinctive_alert, body_type="alert", default_card="1")
-        code, out = run("--dry-run")
+        code, out, _err = run("--dry-run")
         printed = json.loads(out)
     check("dry-run exit zero", code == 0)
     check("method is POST", printed["method"] == "POST")
@@ -202,7 +210,7 @@ def test_non_200_exits_non_zero_and_keeps_handoff_file():
         with tempfile.TemporaryDirectory() as d:
             msg_file, _, _ = write_fixtures(Path(d), endpoint=f"{base}/api/message")
             # http:// is accepted — Pi backend on household LAN/tailnet.
-            code, _ = run()
+            code, _, _err = run()
             file_exists_after_run = msg_file.exists()
     finally:
         server.shutdown()
@@ -229,7 +237,7 @@ def test_missing_or_empty_inputs_fail_fast():
         with tempfile.TemporaryDirectory() as d:
             msg, ep, tok = write_fixtures(Path(d))
             mutate({"msg": msg, "endpoint": ep, "token": tok})
-            code, _ = run("--dry-run")
+            code, _, _err = run("--dry-run")
         check(f"--dry-run exits non-zero when {label}", code != 0)
 
 
@@ -241,12 +249,12 @@ def test_unset_message_file_or_body_type_fails_fast():
     with tempfile.TemporaryDirectory() as d:
         write_fixtures(Path(d))
         post_to_kiosk.MESSAGE_FILE = None
-        code, _ = run("--dry-run")
+        code, _, _err = run("--dry-run")
         check("unset MESSAGE_FILE exits non-zero", code != 0)
     with tempfile.TemporaryDirectory() as d:
         write_fixtures(Path(d))
         post_to_kiosk.BODY_TYPE = None
-        code, _ = run("--dry-run")
+        code, _, _err = run("--dry-run")
         check("unset BODY_TYPE exits non-zero", code != 0)
 
 
@@ -259,7 +267,7 @@ def test_non_http_schemes_rejected_with_no_token_leak():
     for scheme_url in ("ftp://attacker.test/api/message", "notaurl"):
         with tempfile.TemporaryDirectory() as d:
             write_fixtures(Path(d), endpoint=scheme_url)
-            code, out = run("--dry-run")
+            code, out, _err = run("--dry-run")
         check(f"non-http(s) endpoint {scheme_url!r} exits non-zero", code != 0)
         check(f"bearer token not echoed for {scheme_url!r}", TOKEN not in out)
 
@@ -288,7 +296,7 @@ def test_redirect_not_followed():
         with tempfile.TemporaryDirectory() as d:
             msg_file, _, _ = write_fixtures(Path(d), endpoint=f"{base}/api/message")
             # http:// is accepted — Pi backend on household LAN/tailnet.
-            code, _ = run()
+            code, _, _err = run()
             handoff_kept = msg_file.exists()
     finally:
         server.shutdown()
@@ -312,7 +320,7 @@ def test_card_default_used_when_no_config():
                 default_card="1",
                 config=None,  # ensures CONFIG_FILE points at a non-existent path
             )
-            code, _ = run()
+            code, _, _err = run()
     finally:
         server.shutdown()
     check("default card fallback: exit zero", code == 0)
@@ -333,7 +341,7 @@ def test_config_card_target_overrides_default():
                 default_card="1",
                 config={"dashboard": {"card_targets": {"alert": "3"}}},
             )
-            code, _ = run()
+            code, _, _err = run()
     finally:
         server.shutdown()
     check("config override: exit zero", code == 0)
@@ -350,7 +358,7 @@ def test_missing_card_both_default_and_config_fails_fast():
             default_card=None,
             config={"dashboard": {"card_targets": {"weather": "3"}}},  # no 'alert' key
         )
-        code, _ = run("--dry-run")
+        code, _, _err = run("--dry-run")
     check("missing card fails fast (non-zero exit)", code != 0)
 
 
@@ -363,7 +371,7 @@ def test_missing_card_no_config_no_default_fails_fast():
             default_card=None,
             config=None,
         )
-        code, _ = run("--dry-run")
+        code, _, _err = run("--dry-run")
     check("missing card (no config, no default) fails fast", code != 0)
 
 
@@ -377,7 +385,7 @@ def test_dry_run_shows_card_from_config():
             default_card="4",
             config={"dashboard": {"card_targets": {"digest": "2"}}},
         )
-        code, out = run("--dry-run")
+        code, out, _err = run("--dry-run")
         printed = json.loads(out)
     check("dry-run with config card: exit zero", code == 0)
     check("dry-run with config card: card is '2' (from config)", printed["body"]["card"] == "2")
@@ -391,7 +399,7 @@ def test_malformed_json_config_fails_fast():
         cfg_file.write_text("{not valid json")
         write_fixtures(Path(d), body_type="alert", default_card="1")
         post_to_kiosk.CONFIG_FILE = str(cfg_file)
-        code, _ = run("--dry-run")
+        code, _, _err = run("--dry-run")
     check("malformed JSON config exits non-zero", code != 0)
 
 
@@ -401,13 +409,13 @@ def test_invalid_card_config_fails_fast():
     (a silent fallback would misroute the card with exit 0). Absent / null
     nodes are the legitimate fallback (covered by the tests above)."""
     cases = [
-        ("numeric leaf", {"dashboard": {"card_targets": {"alert": 3}}}),
-        ("whitespace-only leaf", {"dashboard": {"card_targets": {"alert": "  "}}}),
-        ("non-dict dashboard", {"dashboard": "x"}),
-        ("non-dict card_targets", {"dashboard": {"card_targets": 5}}),
-        ("non-object top level", ["not", "an", "object"]),
+        ("numeric leaf", {"dashboard": {"card_targets": {"alert": 3}}}, "card_targets.alert"),
+        ("whitespace-only leaf", {"dashboard": {"card_targets": {"alert": "  "}}}, "card_targets.alert"),
+        ("non-dict dashboard", {"dashboard": "x"}, "dashboard"),
+        ("non-dict card_targets", {"dashboard": {"card_targets": 5}}, "card_targets"),
+        ("non-object top level", ["not", "an", "object"], "JSON object"),
     ]
-    for label, cfg in cases:
+    for label, cfg, named in cases:
         with tempfile.TemporaryDirectory() as d:
             write_fixtures(
                 Path(d),
@@ -415,8 +423,9 @@ def test_invalid_card_config_fails_fast():
                 default_card="1",
                 config=cfg,
             )
-            code, _ = run("--dry-run")
+            code, _, err = run("--dry-run")
         check(f"invalid card config ({label}) exits non-zero", code != 0)
+        check(f"invalid card config ({label}) names the offending node", named in err)
 
 
 def test_dashboard_null_falls_back_to_default():
@@ -433,7 +442,7 @@ def test_dashboard_null_falls_back_to_default():
                 default_card="1",
                 config={"dashboard": None},
             )
-            code, _ = run()
+            code, _, _err = run()
     finally:
         server.shutdown()
     check("dashboard:null falls back to DEFAULT_CARD (exit zero)", code == 0)
