@@ -37,6 +37,7 @@ Run the following block to assemble + land the household config, land the secret
 ```bash
 set -euo pipefail
 export DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN LD_OWNER_NAME LD_OWNER_IMESSAGE LD_CALENDAR_ACCOUNT   # all five from the Requirements above
+# plus `export LD_TIMEZONE` iff a timezone conflict was confirmed (see "ld-config is landed")
 bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ```
 

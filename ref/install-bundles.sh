@@ -168,6 +168,12 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
       *) LD_TIMEZONE="" ;;
     esac
     [ -n "$LD_TIMEZONE" ] || LD_TIMEZONE="America/Los_Angeles"
+  elif [ ! -e "/usr/share/zoneinfo/$LD_TIMEZONE" ]; then
+    # The autodetect path is zoneinfo-derived by construction; the
+    # override path must fail loud on a typo'd zone, never land it —
+    # a wrong zone silently shifts every scheduled send by hours.
+    echo "LD_TIMEZONE '$LD_TIMEZONE' is not a valid IANA zone — fix the export and re-run." >&2
+    exit 1
   fi
 
   # Assemble. The PII values (owner name/handle, calendar account) reach
@@ -177,7 +183,8 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
   # arrive EXPORTED in this script's env (the installer sets them), so they
   # are `unset` right after this block — before the bundle-POST python3
   # child below — so that child never inherits owner PII. Only the non-PII
-  # autodetected timezone is passed via --arg. Mirrors the example's shape: single owner,
+  # timezone (autodetected or pre-exported after a conflict
+  # confirmation) is passed via --arg. Mirrors the example's shape: single owner,
   # one primary calendar, the example's real calendar_nudge lookahead
   # defaults; optional sections (partner, extra calendars, long-lead)
   # omitted.
