@@ -49,6 +49,29 @@ const NWS_BASE = "https://api.weather.gov/";
 // Inlined for now — matches calendar-nudge, avoids a cross-bundle dep at
 // rule-of-2.
 
+// Resolve the card slot from config, matching post_to_kiosk.py::_resolve_card semantics:
+//   absent/null at any level of dashboard / card_targets / per-type key → defaultCard
+//   present but non-object dashboard or card_targets → throw (misconfigured node)
+//   present per-type value that isn't a non-empty-trimmed string → throw (misconfigured key)
+function resolveCard(config, type, defaultCard) {
+  const dashboard = config != null ? config.dashboard : undefined;
+  if (dashboard === undefined || dashboard === null) return defaultCard;
+  if (typeof dashboard !== "object" || Array.isArray(dashboard)) {
+    throw new Error(`dashboard in config must be an object, got ${JSON.stringify(dashboard)}`);
+  }
+  const cardTargets = dashboard.card_targets;
+  if (cardTargets === undefined || cardTargets === null) return defaultCard;
+  if (typeof cardTargets !== "object" || Array.isArray(cardTargets)) {
+    throw new Error(`dashboard.card_targets in config must be an object, got ${JSON.stringify(cardTargets)}`);
+  }
+  const raw = cardTargets[type];
+  if (raw === undefined || raw === null) return defaultCard;
+  if (typeof raw !== "string" || !raw.trim()) {
+    throw new Error(`dashboard.card_targets.${type} in config must be a non-empty string, got ${JSON.stringify(raw)}`);
+  }
+  return raw.trim();
+}
+
 function log(message, fields) {
   try {
     console.error(`[ld-weather] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
@@ -155,9 +178,10 @@ async function run(opts = {}) {
   ]);
   const text = composeWeather(location, hourlyBody, dailyBody);
 
-  // Resolve card slot: config override (string, non-blank) or built-in default "3".
-  const raw = config?.dashboard?.card_targets?.weather;
-  const card = (typeof raw === "string" && raw.trim()) ? raw.trim() : "3";
+  // Resolve card slot — fail-loud semantics matching _resolve_card in post_to_kiosk.py:
+  // absent/null at any level → fall back to default "3"; present non-null non-string
+  // or present blank string → throw (misconfigured key must not silently misroute).
+  const card = resolveCard(config, "weather", "3");
 
   if (opts.dryRun) {
     // Body-free stderr; the manual-run path (require.main) prints the line to

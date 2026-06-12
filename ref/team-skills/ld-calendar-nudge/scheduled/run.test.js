@@ -243,9 +243,22 @@ test("dashboard.card_targets.nudge overrides default card", async () => {
   assert.equal(body.card, "4");
 });
 
-test("empty-string card_targets.nudge falls back to '2'", async () => {
-  for (const bad of ["", "  ", 2, null]) {
-    const body = await runWithCard({ dashboard: { card_targets: { nudge: bad } } });
-    assert.equal(body.card, "2", `expected fallback "2" for override ${JSON.stringify(bad)}`);
+test("null card_targets.nudge falls back to default '2'", async () => {
+  // null is absent-equivalent — key present with JSON null → fall back, no error.
+  const body = await runWithCard({ dashboard: { card_targets: { nudge: null } } });
+  assert.equal(body.card, "2");
+});
+
+test("present-but-invalid card_targets.nudge throws (fail-loud)", async () => {
+  // Present non-null values that aren't a non-empty-trimmed string → throw.
+  for (const bad of ["", "  ", 2]) {
+    await assert.rejects(
+      () => runWithCard({ dashboard: { card_targets: { nudge: bad } } }),
+      (err) => {
+        assert.match(String(err.message), /dashboard\.card_targets\.nudge/);
+        return true;
+      },
+      `expected throw for override ${JSON.stringify(bad)}`
+    );
   }
 });

@@ -86,19 +86,39 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 
-test("empty-string and numeric card_targets fall back to '3'", async () => {
-  for (const badOverride of ["", "  ", 3, null]) {
-    const fetch = fakeFetch();
-    await run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: { ...baseConfig(), dashboard: { card_targets: { weather: badOverride } } },
-      fetch,
-      dashUrl: "https://kiosk.example/api/message",
-      dashToken: "tok",
-    });
-    const post = fetch.calls.find((c) => c.opts.method === "POST");
-    assert.ok(post, `a kiosk POST happened for override ${JSON.stringify(badOverride)}`);
-    assert.equal(JSON.parse(post.opts.body).card, "3", `expected fallback "3" for ${JSON.stringify(badOverride)}`);
+test("null card_targets.weather falls back to default '3'", async () => {
+  // null is absent-equivalent — key present with JSON null → fall back, no error.
+  const fetch = fakeFetch();
+  await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: { ...baseConfig(), dashboard: { card_targets: { weather: null } } },
+    fetch,
+    dashUrl: "https://kiosk.example/api/message",
+    dashToken: "tok",
+  });
+  const post = fetch.calls.find((c) => c.opts.method === "POST");
+  assert.ok(post, "a kiosk POST happened for null override");
+  assert.equal(JSON.parse(post.opts.body).card, "3");
+});
+
+test("present-but-invalid card_targets.weather throws (fail-loud)", async () => {
+  // Present non-null values that aren't a non-empty-trimmed string → throw.
+  for (const bad of ["", "  ", 3]) {
+    await assert.rejects(
+      () =>
+        run({
+          now: new Date("2026-06-09T22:00:00Z"),
+          config: { ...baseConfig(), dashboard: { card_targets: { weather: bad } } },
+          fetch: fakeFetch(),
+          dashUrl: "https://kiosk.example/api/message",
+          dashToken: "tok",
+        }),
+      (err) => {
+        assert.match(String(err.message), /dashboard\.card_targets\.weather/);
+        return true;
+      },
+      `expected throw for override ${JSON.stringify(bad)}`
+    );
   }
 });
 
