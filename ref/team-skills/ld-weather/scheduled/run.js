@@ -16,8 +16,9 @@
 //
 // When it runs: resolve the NWS gridpoint from weather.lat/lon, fetch the
 // hourly + daily forecast, compose one glanceable line (compose.js), and post
-// it to the kiosk as type:weather. No LLM, deterministic. No iMessage —
-// weather is an ambient card, not a notification.
+// it to the kiosk as card 3 / type:weather (the viewer requires all three of
+// card/type/text; type renders verbatim as the card's eyebrow). No LLM,
+// deterministic. No iMessage — weather is an ambient card, not a notification.
 //
 // Config + secrets are read from the /config mount (all written by plowd):
 //   /config/runtime/ld/config.json        — family.timezone, weather.{location,lat,lon}
@@ -118,7 +119,7 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "weather", text }),
+    body: JSON.stringify({ card: "3", type: "weather", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }

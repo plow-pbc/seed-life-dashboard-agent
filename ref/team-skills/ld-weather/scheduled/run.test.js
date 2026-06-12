@@ -69,7 +69,7 @@ test("off-window tick gates out without fetching", async () => {
   assert.equal(fetch.calls.length, 0);
 });
 
-test("in-window tick fetches, composes, and posts type:weather", async () => {
+test("in-window tick fetches, composes, and posts card 3 / type:weather", async () => {
   const fetch = fakeFetch();
   const res = await run({
     now: new Date("2026-06-09T22:00:00Z"), // 3:00pm PT → minute 0
@@ -82,7 +82,11 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   const post = fetch.calls.find((c) => c.opts.method === "POST");
   assert.ok(post, "a kiosk POST happened");
   assert.equal(post.opts.redirect, "error");
-  assert.deepEqual(JSON.parse(post.opts.body), { type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.deepEqual(JSON.parse(post.opts.body), {
+    card: "3",
+    type: "weather",
+    text: "Mountain View · 72°F Sunny · H75 L54",
+  });
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 

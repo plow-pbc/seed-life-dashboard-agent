@@ -185,9 +185,11 @@ from `/config/secrets/dashboard-endpoint-url`, and the token from
 Both files live in `/config/secrets/` (mode 0600), the credential seam
 `team-skills/README.md` curates the agent away from — a prompt-injected
 turn cannot rewrite the endpoint to exfiltrate the bearer-token POST.
-It fails loudly on any non-200 response.
+It posts the affirmation as card 2 with `type: "affirmation"` (the type
+renders verbatim as the card's eyebrow label) and fails loudly on any
+non-200 response.
 
-The endpoint stores a single current message per type, so each post
+The endpoint stores a single current message per card, so each post
 replaces the previous one. There is no expiry: the message stays on the
 dashboard until the next day's post replaces it.
 

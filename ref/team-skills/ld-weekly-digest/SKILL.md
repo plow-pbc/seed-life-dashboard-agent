@@ -141,8 +141,8 @@ The digest is delivered on two surfaces, in this order:
        /workspace/skills/ld-weekly-digest/scripts/post_digest.py
 
    The helper reads endpoint + token from the same `/config/secrets/`
-   paths the other ld- bundles use, posts the digest to the kiosk with
-   `type: "digest"`, and consumes the handoff file on success. Fails
+   paths the other ld- bundles use, posts the digest to the kiosk as
+   card 4 with `type: "digest"`, and consumes the handoff file on success. Fails
    loudly on any non-200 response — surface that and stop; do not
    continue to the iMessage step on a failed kiosk post.
 

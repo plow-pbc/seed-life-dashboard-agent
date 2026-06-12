@@ -24,7 +24,7 @@ installing the bundle is enough.
 (NWS reports °F for US points — Fahrenheit-only by contract, no units knob),
 resolves the NWS gridpoint, fetches the
 hourly + daily forecast, composes one glanceable line (`compose.js`), and
-posts it to the kiosk as `type: weather`. The kiosk renders the line
+posts it to the kiosk as card 3, `type: weather`. The kiosk renders the line
 verbatim — no JSON, no parsing. Example:
 
     Mountain View · 72°F Sunny · H77 L55

@@ -110,7 +110,9 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "nudge", text }),
+    // Card 1 / type "alert" — calendar reminders share the alert slot with
+    // ld-morning-triage (the store is latest-per-card, so the newest wins).
+    body: JSON.stringify({ card: "1", type: "alert", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
