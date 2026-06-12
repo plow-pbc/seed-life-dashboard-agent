@@ -313,10 +313,10 @@ Where:
   same bearer risk — such an event is classified virtual (see Filter)
   and rendered `online`, never echoing the raw URL.
 
-Keep each reminder ≤ 200 characters and omit description / attendee
+Keep each reminder ≤ 115 characters and omit description / attendee
 list (privacy + signal-to-noise). `scheduled/compose.js`
 enforces the cap deterministically: when a composed line
-exceeds 200 chars it truncates the **variable** fields with an ellipsis
+exceeds 115 chars it truncates the **variable** fields with an ellipsis
 — location first, then the title — while always preserving the fixed
 `at <local_time> (<minutes_until>m)` portion (the actionable part).
 Never slice the whole composed line, which could drop the time. For the

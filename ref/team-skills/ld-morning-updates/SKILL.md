@@ -120,8 +120,9 @@ Privacy boundary below.
 
 ## Compose the affirmation
 
-Write **one or two short sentences** — warm, encouraging, for the whole
-family. Vary the tone and wording day to day; never sound templated.
+Write **one or two short sentences, ≤115 characters total** (the kiosk
+card ellipsizes anything longer mid-thought) — warm, encouraging, for the
+whole family. Vary the tone and wording day to day; never sound templated.
 
 **Anchor it in something specific from the gathered context.** Generic
 "big day team, plenty on the calendar" is a failure mode — the

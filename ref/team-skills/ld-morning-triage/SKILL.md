@@ -45,7 +45,7 @@ Once per morning:
 2. Gather read-only context from the three sources.
 3. Pre-filter to unaddressed candidates.
 4. Rank with the LLM, drawing on today's calendar + `ranking_instructions`.
-5. Compose a ≤240-char paraphrased alert.
+5. Compose a ≤115-char paraphrased alert.
 6. Post it via `scripts/post_alert.py`.
 
 This skill only posts the scheduled morning alert. It does not manage
@@ -166,7 +166,7 @@ Ask for JSON output:
       "source": "imessage|gmail",
       "who": "<sender display name>",
       "why_now": "<one sentence explaining contextual urgency>",
-      "alert_text": "<≤240 chars, neutral voice, paraphrased — never quote message bodies verbatim>"
+      "alert_text": "<≤115 chars, neutral voice, paraphrased — never quote message bodies verbatim>"
     }
 
 If the LLM returns malformed JSON or empty `alert_text`, retry once.
