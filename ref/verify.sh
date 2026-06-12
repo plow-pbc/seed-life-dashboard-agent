@@ -126,9 +126,18 @@ echo "hello from verify" > "$DRY_INPUT"
 # not be silently masked so the grep becomes the only signal. The
 # output goes to a private mktemp file (not a fixed world-readable
 # /tmp path) to avoid symlink/TOCTOU + concurrent-run collisions.
+# The wrapper's __main__ dispatch can't be exercised without running it (the
+# named-module load below is exactly what keeps the live handoff untouched),
+# so prove the dispatch contract textually — proportionate for a 22-line
+# wrapper; a dropped `if __name__` block or main() call fails verify here.
+WRAPPER_PATH="$WORKSPACE_SKILLS/ld-morning-affirmation/scripts/post_affirmation.py"
+grep -q 'if __name__ == "__main__":' "$WRAPPER_PATH" \
+  && grep -q 'post_to_kiosk.main()' "$WRAPPER_PATH" \
+  || { echo "FAIL v-dry-run: installed wrapper lost its __main__ dispatch" >&2; exit 1; }
+
 DRY_RC=0
 SHARED_SCRIPTS="$WORKSPACE_SKILLS/ld-shared/scripts" \
-WRAPPER_FILE="$WORKSPACE_SKILLS/ld-morning-affirmation/scripts/post_affirmation.py" \
+WRAPPER_FILE="$WRAPPER_PATH" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
 DRY_INPUT="$DRY_INPUT" \
