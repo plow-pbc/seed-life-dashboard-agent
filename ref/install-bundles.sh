@@ -185,7 +185,7 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
     {
       family: { owner: { name: env.LD_OWNER_NAME, imessage: env.LD_OWNER_IMESSAGE }, timezone: $tz },
       calendar: { sources: [ { account: env.LD_CALENDAR_ACCOUNT, calendar_id: "primary", name: "Personal" } ] },
-      morning_updates: { review_window_hours: 24 },
+      morning_affirmation: { review_window_hours: 24 },
       morning_triage: { ranking_instructions: "", exclude: { imessage_handles: [], email_addresses: [] } },
       calendar_nudge: { lookahead_virtual_minutes: 30, lookahead_in_person_minutes: 60 },
       weather: { location: "Mountain View", lat: 37.386, lon: -122.083 }

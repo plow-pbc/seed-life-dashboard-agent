@@ -91,17 +91,40 @@ def _resolve_card(body_type: str) -> str:
     Resolution order:
       1. config.json → dashboard.card_targets[body_type] (optional override)
       2. DEFAULT_CARD (bundle built-in)
-    Fails fast with a clear message if neither resolves to a non-empty string.
+
+    Absent config file (FileNotFoundError) → fall through to DEFAULT_CARD.
+    Present-but-unparseable config (JSONDecodeError) → fail fast.
+    Present-and-parsed config with card_targets[body_type] set to a
+    non-string or whitespace-only string → fail fast with a clear message.
+    Missing keys / None values (key absent, dashboard absent, card_targets
+    absent) → fall through to DEFAULT_CARD.
     """
-    # Try config.json first.
     try:
         raw = Path(CONFIG_FILE).read_text()
-        cfg = json.loads(raw)
-        card = cfg.get("dashboard", {}).get("card_targets", {}).get(body_type)
-        if isinstance(card, str) and card.strip():
-            return card.strip()
-    except (OSError, json.JSONDecodeError):
-        pass  # config absent or malformed → fall through to DEFAULT_CARD
+    except FileNotFoundError:
+        raw = None  # absent config is a legitimate fallback
+    except OSError as exc:
+        sys.exit(f"error: could not read config {CONFIG_FILE}: {exc.strerror}")
+
+    if raw is not None:
+        try:
+            cfg = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            sys.exit(f"error: config {CONFIG_FILE} is not valid JSON: {exc}")
+
+        # Walk the key chain; None at any level means "not configured" → fallback.
+        dashboard = cfg.get("dashboard") if isinstance(cfg, dict) else None
+        card_targets = dashboard.get("card_targets") if isinstance(dashboard, dict) else None
+        if card_targets is not None:
+            card = card_targets.get(body_type) if isinstance(card_targets, dict) else None
+            if card is not None:
+                # Key is explicitly present — it must be a non-blank string.
+                if not isinstance(card, str) or not card.strip():
+                    sys.exit(
+                        f"error: dashboard.card_targets.{body_type} in {CONFIG_FILE} "
+                        f"must be a non-empty string, got {card!r}"
+                    )
+                return card.strip()
 
     if isinstance(DEFAULT_CARD, str) and DEFAULT_CARD.strip():
         return DEFAULT_CARD.strip()

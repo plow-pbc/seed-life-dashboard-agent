@@ -13,7 +13,7 @@
       { "account": "[PARTNER_CALENDAR_ACCOUNT]", "calendar_id": "primary", "name": "Partner", "self": false }
     ]
   },
-  "morning_updates": {
+  "morning_affirmation": {
     "review_window_hours": 24
   },
   "weekly_digest": {

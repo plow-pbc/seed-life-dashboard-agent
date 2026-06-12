@@ -383,6 +383,67 @@ def test_dry_run_shows_card_from_config():
     check("dry-run with config card: card is '2' (from config)", printed["body"]["card"] == "2")
 
 
+def test_malformed_json_config_fails_fast():
+    """A config file that exists but is not valid JSON must exit non-zero with a
+    clear message — not silently fall back to DEFAULT_CARD."""
+    with tempfile.TemporaryDirectory() as d:
+        cfg_file = Path(d) / "config.json"
+        cfg_file.write_text("{not valid json")
+        write_fixtures(Path(d), body_type="alert", default_card="1")
+        post_to_kiosk.CONFIG_FILE = str(cfg_file)
+        code, _ = run("--dry-run")
+    check("malformed JSON config exits non-zero", code != 0)
+
+
+def test_numeric_card_target_fails_fast():
+    """A card_targets value that is a number (not a string) must exit non-zero
+    with a message naming the key — not silently fall back to DEFAULT_CARD."""
+    with tempfile.TemporaryDirectory() as d:
+        write_fixtures(
+            Path(d),
+            body_type="alert",
+            default_card="1",
+            config={"dashboard": {"card_targets": {"alert": 3}}},
+        )
+        code, _ = run("--dry-run")
+    check("numeric card_target exits non-zero", code != 0)
+
+
+def test_whitespace_only_card_target_fails_fast():
+    """A card_targets value that is whitespace-only must exit non-zero."""
+    with tempfile.TemporaryDirectory() as d:
+        write_fixtures(
+            Path(d),
+            body_type="alert",
+            default_card="1",
+            config={"dashboard": {"card_targets": {"alert": "  "}}},
+        )
+        code, _ = run("--dry-run")
+    check("whitespace-only card_target exits non-zero", code != 0)
+
+
+def test_dashboard_null_falls_back_to_default():
+    """'dashboard': null means the key is absent/unconfigured → fallback to
+    DEFAULT_CARD is correct (the shape is merely absent, not invalid)."""
+    server, base = _start_capturing_server()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            write_fixtures(
+                Path(d),
+                text="hello",
+                endpoint=f"{base}/api/message",
+                body_type="alert",
+                default_card="1",
+                config={"dashboard": None},
+            )
+            code, _ = run()
+    finally:
+        server.shutdown()
+    check("dashboard:null falls back to DEFAULT_CARD (exit zero)", code == 0)
+    if _CapturingHandler.received:
+        check("dashboard:null uses default card '1'", _CapturingHandler.received[0]["body"]["card"] == "1")
+
+
 # ─────────── wrapper smoke tests: each bundle's thin wrapper ───────────
 
 
@@ -447,6 +508,10 @@ def main():
     test_missing_card_both_default_and_config_fails_fast()
     test_missing_card_no_config_no_default_fails_fast()
     test_dry_run_shows_card_from_config()
+    test_malformed_json_config_fails_fast()
+    test_numeric_card_target_fails_fast()
+    test_whitespace_only_card_target_fails_fast()
+    test_dashboard_null_falls_back_to_default()
     test_wrapper_contracts()
     print(f"\n{passed} passed, {failed} failed")
     sys.exit(0 if failed == 0 else 1)

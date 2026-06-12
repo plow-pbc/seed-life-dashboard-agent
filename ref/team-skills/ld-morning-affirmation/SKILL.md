@@ -12,7 +12,7 @@ one short, warm affirmation for the whole family, posted every morning at
 **Read `/config/runtime/ld/config.json` before starting** — the shared
 life-dashboard config. This skill uses the `family` section (the owner's
 message handle, and the partner's if `family.partner` is present) and
-`morning_updates.review_window_hours` (the message review window). A
+`morning_affirmation.review_window_hours` (the message review window). A
 single-parent household omits `family.partner`; the partner-thread
 context below is skipped when it's absent. (The sibling
 `ld-shared/references/config.example.json` is the template for all ld-
@@ -209,3 +209,8 @@ Create it with `cron action=add`:
 - schedule: `{"kind":"cron","expr":"0 7 * * *","tz":<family.timezone from /config/runtime/ld/config.json>}`
 - `contextMessages=3` — so the affirmation varies day to day
 - payload message: `Read and follow the skill bundle at /workspace/skills/ld-morning-affirmation. Read /config/runtime/ld/config.json first. Compose and post today's family affirmation — make it different from recent mornings.`
+
+**Re-install note:** a pre-rename install may have a cron job named
+`ld-morning-updates` (the old job name). That job is orphaned — remove it
+with `cron action=remove name=ld-morning-updates` and let this skill create
+its own `ld-morning-affirmation` job.
