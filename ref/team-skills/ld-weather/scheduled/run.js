@@ -49,6 +49,29 @@ const NWS_BASE = "https://api.weather.gov/";
 // Inlined for now — matches calendar-nudge, avoids a cross-bundle dep at
 // rule-of-2.
 
+// Resolve the card slot from config, matching post_to_kiosk.py::_resolve_card semantics:
+//   absent/null at any level of dashboard / card_targets / per-type key → defaultCard
+//   present but non-object dashboard or card_targets → throw (misconfigured node)
+//   present per-type value that isn't a non-empty-trimmed string → throw (misconfigured key)
+function resolveCard(config, type, defaultCard) {
+  const dashboard = config != null ? config.dashboard : undefined;
+  if (dashboard === undefined || dashboard === null) return defaultCard;
+  if (typeof dashboard !== "object" || Array.isArray(dashboard)) {
+    throw new Error("dashboard in config must be an object");
+  }
+  const cardTargets = dashboard.card_targets;
+  if (cardTargets === undefined || cardTargets === null) return defaultCard;
+  if (typeof cardTargets !== "object" || Array.isArray(cardTargets)) {
+    throw new Error("dashboard.card_targets in config must be an object");
+  }
+  const raw = cardTargets[type];
+  if (raw === undefined || raw === null) return defaultCard;
+  if (typeof raw !== "string" || !raw.trim()) {
+    throw new Error(`dashboard.card_targets.${type} in config must be a non-empty string`);
+  }
+  return raw.trim();
+}
+
 function log(message, fields) {
   try {
     console.error(`[ld-weather] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
@@ -108,7 +131,7 @@ async function resolveForecastUrls(fetchImpl, lat, lon) {
   return { daily, hourly };
 }
 
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
+async function postKiosk(fetchImpl, dashUrl, dashToken, card, text) {
   // The Pi backend rides the household LAN/tailnet, not the public internet —
   // http:// is an accepted trade-off for that trust zone.
   if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
@@ -118,7 +141,7 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "weather", text }),
+    body: JSON.stringify({ card, type: "weather", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
@@ -155,16 +178,21 @@ async function run(opts = {}) {
   ]);
   const text = composeWeather(location, hourlyBody, dailyBody);
 
+  // Resolve card slot — fail-loud semantics matching _resolve_card in post_to_kiosk.py:
+  // absent/null at any level → fall back to default "3"; present non-null non-string
+  // or present blank string → throw (misconfigured key must not silently misroute).
+  const card = resolveCard(config, "weather", "3");
+
   if (opts.dryRun) {
     // Body-free stderr; the manual-run path (require.main) prints the line to
     // stdout for the operator. Keeps household location out of runner logs.
-    log("dry_run");
-    return { dryRun: true, text };
+    log("dry_run", { card });
+    return { dryRun: true, card, text };
   }
 
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, card, text);
   log("weather_posted"); // body-free — the card text carries household location
   return { posted: true, text };
 }

@@ -9,11 +9,11 @@ Surface the *one* unaddressed inbound message from the last 36 hours
 that the user should pay attention to today, and post it to the
 life-dashboard kiosk as `type: alert`. Runs every morning at 07:05
 in `family.timezone`, five minutes after the affirmation
-(`ld-morning-updates`), so the two cron ticks remain visually distinct
+(`ld-morning-affirmation`), so the two cron ticks remain visually distinct
 in `cron list`.
 
 **Read `/config/runtime/ld/config.json` before starting** — the shared
-life-dashboard config (same file `ld-morning-updates` reads). This
+life-dashboard config (same file `ld-morning-affirmation` reads). This
 skill uses:
 
 - `morning_triage.ranking_instructions` — free-form prompt context
@@ -33,9 +33,9 @@ fails fast if any is missing or empty):
 - `/config/secrets/dashboard-endpoint-url` — one line, the kiosk
   `/api/message` URL (e.g. `https://life-dashboard.example/api/message`).
   Lives beside the token in the read-only `/config/secrets` mount, same
-  path `ld-morning-updates` uses.
+  path `ld-morning-affirmation` uses.
 - `/config/secrets/dashboard-token` — one line, the bearer token. Shared
-  with `ld-morning-updates`; do not duplicate.
+  with `ld-morning-affirmation`; do not duplicate.
 
 ## What this skill does
 
@@ -110,7 +110,7 @@ the events across sources. Do **not** use `plow_calendar_today` — it
 computes "today" from the runner's process-local timezone, which
 differs from `family.timezone` for any non-Pacific runner and silently
 drops the household's actual same-day events. Same contract as
-`ld-morning-updates` / `ld-weekly-digest`. Used as ranking context
+`ld-morning-affirmation` / `ld-weekly-digest`. Used as ranking context
 only — never quoted in the posted alert.
 
 **To fork off-Plow**: rewrite this section to retarget the three
@@ -209,7 +209,7 @@ Create it with `cron action=add`:
   paired notification (the kiosk is glanceable; iMessage gets the
   owner's attention). The duplicate is deliberate, not avoided.
 - schedule: `{"kind":"cron","expr":"5 7 * * *","tz":<family.timezone from /config/runtime/ld/config.json>}`
-  — five minutes after `ld-morning-updates` so cron ticks stay
+  — five minutes after `ld-morning-affirmation` so cron ticks stay
   visually distinct in `cron list`
 - `contextMessages=0` — prioritization should be consistent across
   runs, not varied for variety's sake

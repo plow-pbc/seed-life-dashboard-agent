@@ -38,6 +38,29 @@ const API_TOKEN_PATH = "/config/secrets/plow-api-token";
 const DASH_URL_PATH = "/config/secrets/dashboard-endpoint-url";
 const DASH_TOKEN_PATH = "/config/secrets/dashboard-token";
 
+// Resolve the card slot from config, matching post_to_kiosk.py::_resolve_card semantics:
+//   absent/null at any level of dashboard / card_targets / per-type key → defaultCard
+//   present but non-object dashboard or card_targets → throw (misconfigured node)
+//   present per-type value that isn't a non-empty-trimmed string → throw (misconfigured key)
+function resolveCard(config, type, defaultCard) {
+  const dashboard = config != null ? config.dashboard : undefined;
+  if (dashboard === undefined || dashboard === null) return defaultCard;
+  if (typeof dashboard !== "object" || Array.isArray(dashboard)) {
+    throw new Error("dashboard in config must be an object");
+  }
+  const cardTargets = dashboard.card_targets;
+  if (cardTargets === undefined || cardTargets === null) return defaultCard;
+  if (typeof cardTargets !== "object" || Array.isArray(cardTargets)) {
+    throw new Error("dashboard.card_targets in config must be an object");
+  }
+  const raw = cardTargets[type];
+  if (raw === undefined || raw === null) return defaultCard;
+  if (typeof raw !== "string" || !raw.trim()) {
+    throw new Error(`dashboard.card_targets.${type} in config must be a non-empty string`);
+  }
+  return raw.trim();
+}
+
 function log(message, fields) {
   try {
     console.error(`[ld-calendar-nudge] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
@@ -100,7 +123,7 @@ async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax
   return items;
 }
 
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
+async function postKiosk(fetchImpl, dashUrl, dashToken, card, text) {
   // The Pi backend rides the household LAN/tailnet, not the public internet —
   // http:// is an accepted trade-off for that trust zone.
   if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
@@ -110,7 +133,7 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "nudge", text }),
+    body: JSON.stringify({ card, type: "nudge", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
@@ -185,11 +208,17 @@ async function run(opts = {}) {
   }
 
   const text = composeReminder(qualifying, { timezone });
+
+  // Resolve card slot — fail-loud semantics matching _resolve_card in post_to_kiosk.py:
+  // absent/null at any level → fall back to default "2"; present non-null non-string
+  // or present blank string → throw (misconfigured key must not silently misroute).
+  const card = resolveCard(config, "nudge", "2");
+
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
 
   // Kiosk first; on a failed kiosk post, surface and stop (don't iMessage).
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, card, text);
   await postImessage(fetchImpl, apiUrl, apiToken, text);
   log("nudge_sent", { count: qualifying.length });
   return { sent: true, count: qualifying.length };

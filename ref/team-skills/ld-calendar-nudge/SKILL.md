@@ -14,7 +14,7 @@ when the bundle is installed; this skill never registers a cron and must
 NOT call `cron action=add` for itself.
 
 **Read `/config/runtime/ld/config.json` before starting** — the shared
-life-dashboard config (same file `ld-morning-updates`, `ld-weekly-digest`,
+life-dashboard config (same file `ld-morning-affirmation`, `ld-weekly-digest`,
 and `ld-morning-triage` read). This skill uses three sections:
 
 - `family.timezone` — the household timezone used for all
@@ -139,7 +139,7 @@ Then keep an event only if **all** hold:
 - `start.date_time` is non-empty. All-day events have `start.date` only
   (no `start.date_time`); computing `minutes_until` from a date alone
   would parse it as midnight in the household's tz and fire a misleading
-  late-night reminder. All-day events belong to `ld-morning-updates` /
+  late-night reminder. All-day events belong to `ld-morning-affirmation` /
   `ld-weekly-digest`, not the meeting-nudge surface.
 - It is in the fire window for its kind:
   - Virtual: `0 < minutes_until ≤ lookahead_virtual_minutes`.
@@ -237,7 +237,7 @@ meetings.
 ## Privacy boundary — non-negotiable
 
 The kiosk is a shared display in the home; a child may read it. Same
-rule as `ld-morning-updates` and `ld-weekly-digest`: skip events the
+rule as `ld-morning-affirmation` and `ld-weekly-digest`: skip events the
 owner marked as private. The mechanism is the standard Google Calendar
 **visibility** field (`private` or `confidential`) — set it in the
 calendar UI on any event whose title/location should not reach a shared
@@ -273,8 +273,10 @@ retry path that would otherwise substitute a misleading failure
 message) and is suppressed by `plow-imessage` (see
 `shouldSuppressDeliveredText` in
 `app/agent-runtime/channels/plow-imessage/src/channel.ts`), so it delivers
-nothing. The kiosk keeps whatever the last bundle posted until a newer
-post of the same type replaces it (there is no expiry).
+nothing. The kiosk keeps whatever was last posted to the same CARD slot until a
+newer post to that card replaces it (there is no expiry). This bundle
+targets card 2 by default — shared with the morning affirmation; latest
+post to the card wins.
 
 **Drift prose to avoid.** The channel suppresses only the *exact*
 token `[NOOP]` (after trim) on this outbound path — any other closure

@@ -82,8 +82,70 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   const post = fetch.calls.find((c) => c.opts.method === "POST");
   assert.ok(post, "a kiosk POST happened");
   assert.equal(post.opts.redirect, "error");
-  assert.deepEqual(JSON.parse(post.opts.body), { type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.deepEqual(JSON.parse(post.opts.body), { card: "3", type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
+});
+
+test("null at any config level falls back to default '3'", async () => {
+  // null is absent-equivalent at every level — leaf, card_targets, dashboard.
+  const dashboards = [{ card_targets: { weather: null } }, { card_targets: null }, null];
+  for (const dashboard of dashboards) {
+    const fetch = fakeFetch();
+    await run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: { ...baseConfig(), dashboard },
+      fetch,
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    });
+    const post = fetch.calls.find((c) => c.opts.method === "POST");
+    assert.ok(post, `a kiosk POST happened for dashboard ${JSON.stringify(dashboard)}`);
+    assert.equal(JSON.parse(post.opts.body).card, "3");
+  }
+});
+
+test("present-but-invalid card_targets.weather throws (fail-loud)", async () => {
+  // Present non-null values that aren't a non-empty-trimmed string → throw;
+  // wrong-shape intermediate nodes (non-object dashboard / card_targets,
+  // including arrays) throw naming the offending node.
+  const cases = [
+    [{ card_targets: { weather: "" } }, /dashboard\.card_targets\.weather/],
+    [{ card_targets: { weather: "  " } }, /dashboard\.card_targets\.weather/],
+    [{ card_targets: { weather: 3 } }, /dashboard\.card_targets\.weather/],
+    ["x", /dashboard in config must be an object/],
+    [{ card_targets: [] }, /dashboard\.card_targets in config must be an object/],
+  ];
+  for (const [dashboard, expectRe] of cases) {
+    await assert.rejects(
+      () =>
+        run({
+          now: new Date("2026-06-09T22:00:00Z"),
+          config: { ...baseConfig(), dashboard },
+          fetch: fakeFetch(),
+          dashUrl: "https://kiosk.example/api/message",
+          dashToken: "tok",
+        }),
+      (err) => {
+        assert.match(String(err.message), expectRe);
+        return true;
+      },
+      `expected throw for dashboard ${JSON.stringify(dashboard)}`
+    );
+  }
+});
+
+test("dashboard.card_targets.weather overrides default card", async () => {
+  const fetch = fakeFetch();
+  await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: { ...baseConfig(), dashboard: { card_targets: { weather: "1" } } },
+    fetch,
+    dashUrl: "https://kiosk.example/api/message",
+    dashToken: "tok",
+  });
+  const post = fetch.calls.find((c) => c.opts.method === "POST");
+  assert.ok(post, "a kiosk POST happened");
+  assert.equal(JSON.parse(post.opts.body).card, "1");
 });
 
 test("--force bypasses the gate off-cadence", async () => {
@@ -107,7 +169,7 @@ test("--dry-run composes but never POSTs", async () => {
     fetch,
     dryRun: true,
   });
-  assert.deepEqual(res, { dryRun: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.deepEqual(res, { dryRun: true, card: "3", text: "Mountain View · 72°F Sunny · H75 L54" });
   assert.ok(!fetch.calls.some((c) => c.opts.method === "POST"), "no kiosk POST in dry-run");
 });
 

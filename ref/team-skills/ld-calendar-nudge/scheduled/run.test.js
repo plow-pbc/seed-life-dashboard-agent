@@ -204,3 +204,72 @@ test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
     );
   }
 });
+
+// ── card resolution ──────────────────────────────────────────────────────────
+
+// Helper: run an in-window tick that returns one qualifying event and
+// captures the kiosk POST body.
+async function runWithCard(configOverrides = {}) {
+  const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+  let postedBody;
+  const fetchImpl = async (url, init) => {
+    if (url.includes("/calendar.events.list")) {
+      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+    }
+    if (init && init.method === "POST" && !url.includes("/channels/")) {
+      postedBody = JSON.parse(init.body);
+    }
+    return { ok: true, async json() { return {}; } };
+  };
+  await run({
+    now,
+    fetch: fetchImpl,
+    config: baseConfig(configOverrides),
+    apiUrl: "https://api.test",
+    apiToken: "tok",
+    dashUrl: "https://dash.test/api/message",
+    dashToken: "dtok",
+  });
+  return postedBody;
+}
+
+test("card defaults to '2' when no config override", async () => {
+  const body = await runWithCard();
+  assert.equal(body.card, "2");
+});
+
+test("dashboard.card_targets.nudge overrides default card", async () => {
+  const body = await runWithCard({ dashboard: { card_targets: { nudge: "4" } } });
+  assert.equal(body.card, "4");
+});
+
+test("null at any config level falls back to default '2'", async () => {
+  // null is absent-equivalent at every level — leaf, card_targets, dashboard.
+  for (const dashboard of [{ card_targets: { nudge: null } }, { card_targets: null }, null]) {
+    const body = await runWithCard({ dashboard });
+    assert.equal(body.card, "2", `default for dashboard ${JSON.stringify(dashboard)}`);
+  }
+});
+
+test("present-but-invalid card_targets.nudge throws (fail-loud)", async () => {
+  // Present non-null values that aren't a non-empty-trimmed string → throw;
+  // wrong-shape intermediate nodes (non-object dashboard / card_targets,
+  // including arrays) throw naming the offending node.
+  const cases = [
+    [{ card_targets: { nudge: "" } }, /dashboard\.card_targets\.nudge/],
+    [{ card_targets: { nudge: "  " } }, /dashboard\.card_targets\.nudge/],
+    [{ card_targets: { nudge: 2 } }, /dashboard\.card_targets\.nudge/],
+    ["x", /dashboard in config must be an object/],
+    [{ card_targets: [] }, /dashboard\.card_targets in config must be an object/],
+  ];
+  for (const [dashboard, expectRe] of cases) {
+    await assert.rejects(
+      () => runWithCard({ dashboard }),
+      (err) => {
+        assert.match(String(err.message), expectRe);
+        return true;
+      },
+      `expected throw for dashboard ${JSON.stringify(dashboard)}`
+    );
+  }
+});

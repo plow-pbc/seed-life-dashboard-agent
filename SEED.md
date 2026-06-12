@@ -45,7 +45,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 ### `ld-*` bundles
 
 - This repo is the **source-of-truth** for the six `ld-*` skill bundles — they live under `ref/team-skills/ld-*/` and are authored and fixed here. There is no upstream the copies track; a fix to bundle behavior lands in this repo.
-- The six installed bundle directories `ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest,weather}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/skills/ld-<name>/`, which is the path the agent reads.
+- The six installed bundle directories `ld-{calendar-nudge,morning-affirmation,morning-triage,shared,weekly-digest,weather}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/skills/ld-<name>/`, which is the path the agent reads.
 
 ### Dashboard secrets
 
@@ -53,6 +53,19 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
   - `dashboard-endpoint-url` — the full `/api/message` URL of the Pi message API.
   - `dashboard-token` — the bearer the Pi message API validates.
 - Both mode 600, owner-only. plowd bind-mounts `agent-runtime/` into the agent VM at `/config/`, so the bundles read these at `/config/secrets/dashboard-{endpoint-url,token}` — the paths `ld-shared/scripts/post_to_kiosk.py` already hardcodes.
+
+### Kiosk POST body
+
+Every bundle posts `{"card": "<slot>", "type": "<type>", "text": "<message>"}` (all three fields required, non-empty strings). The kiosk renders numbered card slots left-to-right: **1** = top-left, **2** = top-middle, **3** = top-right, **4** = bottom full-width.
+
+`card` is resolved at post time in priority order:
+
+1. `config.json → dashboard.card_targets.<type>` — optional per-household override.
+2. Each producer's built-in default: `alert→"1"`, `affirmation→"2"`, `weather→"3"`, `digest→"4"`, `nudge→"2"`.
+
+The fail-fast rule: if neither resolves to a non-empty string, the post helper exits non-zero with a clear message — no silent mismatch. The `dashboard.card_targets` section in `config.json` is fully optional; code defaults apply when it is absent. See `ref/team-skills/ld-shared/references/config.example.json` for the shape.
+
+The endpoint+token contract (the `/api/message` URL and bearer) is unchanged — `card`/`type`/`text` are message-body fields, not a new secret or endpoint path.
 
 ### Endpoint inputs
 
@@ -64,7 +77,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 - The household-state file at `<app_support>/agent-runtime/runtime/ld/config.json`, mode 600. Holds the family facts, calendar accounts, and per-skill prefs that every `ld-*` bundle reads at its first invocation. plowd bind-mounts the VM-side path `/config/runtime/ld/config.json` from here.
 - On first install, the SEED ASSEMBLES this file from the declared [inputs](#requirements) (the action's prose is in [ld-config is landed](#ld-config-is-landed)). It mirrors the shape of the repo-local example (`ref/team-skills/ld-shared/references/config.example.json`) — `family.owner.{name,imessage}`, an autodetected `family.timezone`, one `calendar.sources[0]` (`calendar_id: "primary"`), and real defaults for the `calendar_nudge` lookaheads — with every `[UPPER_SNAKE]` placeholder filled and optional sections (partner, extra calendars, long-lead) omitted. Single-parent / single-calendar is the default; an operator who wants more edits the landed file directly.
-- Re-runs preserve an existing config that passes the structural gate — the operator's edits are canonical. Two narrow exceptions: (1) a landed file that still FAILS the gate (e.g. a corrupted edit) is re-assembled from the inputs through the same validation path, so a corrected rerun is not short-circuited by the early "file exists" return; (2) a gate-passing file that predates `ld-weather` and has no `weather` section gets the Mountain View `weather` defaults appended — never overwriting an existing `weather` block — so the auto-activating weather runner has the `lat`/`lon` it needs instead of fail-looping every tick.
+- Re-runs preserve an existing config that passes the structural gate — the operator's edits are canonical. Three narrow exceptions: (1) a landed file that still FAILS the gate (e.g. a corrupted edit) is re-assembled from the inputs through the same validation path, so a corrected rerun is not short-circuited by the early "file exists" return; (2) a gate-passing file that predates `ld-weather` and has no `weather` section gets the Mountain View `weather` defaults appended — never overwriting an existing `weather` block — so the auto-activating weather runner has the `lat`/`lon` it needs instead of fail-looping every tick; (3) a gate-passing file that predates the affirmation rename has its `morning_updates` key renamed in place to `morning_affirmation` (the operator's window value travels; an existing `morning_affirmation` block is never overwritten) — so the renamed bundle finds the section it reads.
 
 ## Actions
 
@@ -96,7 +109,7 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
   but the exact filter is the agent's to adapt to the host — the contract below is what MUST hold, not a specific command.
 - **family.timezone is autodetected, not an input.** The IANA zone is everything after the last `/zoneinfo/` in `readlink /etc/localtime` (e.g. `/usr/share/zoneinfo/America/New_York` → `America/New_York`), falling back to `America/Los_Angeles` when detection yields nothing — so a non-Pacific household gets the right local time without a 4th question. This is one inline `readlink` + parse, not a sourced helper.
 - **PII never leaks.** The operator inputs (owner name/handle, calendar account) are personal-context-secret. They MUST NOT be echoed to stdout, MUST NOT be written anywhere in the SEED tree, and MUST reach `jq` only **through the environment, read inside the filter via jq's `env` builtin — never `--arg`/argv** (which would surface them in `/proc/<pid>/cmdline`). Only the non-PII autodetected `family.timezone` MAY be passed via `--arg`. The assembled config is JSON-validated AND run through the [minimal structural gate](#minimal-structural-gate) BEFORE the atomic `mv`; a blank input or a gate failure FAILS LOUD, non-zero, with nothing landed (a landed-but-bad file would short-circuit every retry).
-- Re-runs MUST NOT overwrite an existing config that PASSES the [minimal structural gate](#minimal-structural-gate) — the operator's edits are the canonical state, even if its zone drifted from the current host (a laptop moved, or a hand-set remote zone). The ONE exception: when the existing file FAILS the gate (a first run that landed nothing usable, or a corrupted edit), the action re-assembles from the inputs and atomically replaces it through the same validation path — otherwise the early "file exists" return would silently ignore a corrected rerun.
+- Re-runs MUST NOT overwrite an existing config that PASSES the [minimal structural gate](#minimal-structural-gate) — the operator's edits are the canonical state, even if its zone drifted from the current host (a laptop moved, or a hand-set remote zone). The three narrow exceptions are those listed under [ld-config](#ld-config): a gate-FAILING file is re-assembled through the same validation path (otherwise the early "file exists" return would silently ignore a corrected rerun), a missing `weather` section is backfilled, and a pre-rename `morning_updates` key is renamed in place to `morning_affirmation`.
 - After landing (or detecting a gate-passing existing) `ld-config`, the install action MUST gate the bundle POST on the [minimal structural gate](#minimal-structural-gate). If the gate fails, the action MUST exit NON-ZERO with a loud "NOT installed" message (distinct from a successful install) BEFORE the bundle POST, NAMING the failing invariant (never the PII values). The [`ld-config` verify check](#verification) cross-checks the same gate at verify time. Single source of truth for "installed": `ld-config` passes the gate. Install, verify, and the operator instructions all agree on this definition.
 
 ### minimal structural gate
@@ -123,7 +136,7 @@ A deterministic bash implementation lives at [`ref/verify.sh`](ref/verify.sh).
 ## Open Items
 
 - **plowd port discovery.** Today we replicate `plow4/justfile`'s pattern. A pinned, plowd-published port file would make this SEED's install simpler.
-- **Cron registration for three of the six bundles.** `ld-calendar-nudge` and `ld-weather` use plowd's `scheduled/` auto-activated entrypoint and recur immediately on install. The other three (`ld-morning-updates`, `ld-morning-triage`, `ld-weekly-digest`) require Plow's **agent-side** `cron action=add` verb to register their daily/weekly recurrences — that's a runtime action only the agent can perform, not a host-side install step this SEED can drive. Operators MUST message Plow after install with "set up the morning-updates / morning-triage / weekly-digest crons" (the agent reads each bundle's `SKILL.md § Scheduling` and runs the right `cron action=add`). The install script surfaces this as a loud post-install note. v2 destination: restructure the three bundles to use plowd's `scheduled/` entrypoint (a bundle change in this repo, deferred — not part of the install contract).
+- **Cron registration for three of the six bundles.** `ld-calendar-nudge` and `ld-weather` use plowd's `scheduled/` auto-activated entrypoint and recur immediately on install. The other three (`ld-morning-affirmation`, `ld-morning-triage`, `ld-weekly-digest`) require Plow's **agent-side** `cron action=add` verb to register their daily/weekly recurrences — that's a runtime action only the agent can perform, not a host-side install step this SEED can drive. Operators MUST message Plow after install with "remove the `ld-morning-updates` cron if present, then set up the morning-affirmation / morning-triage / weekly-digest crons" (the agent reads each bundle's `SKILL.md § Scheduling` and runs the right `cron action=add`). The install script surfaces this as a loud post-install note. v2 destination: restructure the three bundles to use plowd's `scheduled/` entrypoint (a bundle change in this repo, deferred — not part of the install contract).
 - **Bundled vs registry-pulled.** The bundles' source lives in this repo; v1 ships them by bundling the copies into the install archive. Eventually a Plow marketplace registry serving signed bundles would replace the bundle-into-archive step (the source would still live here, just be published to the registry rather than POSTed directly). v2 candidate.
 
 ## Non-Goals

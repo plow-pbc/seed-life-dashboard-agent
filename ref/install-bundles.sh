@@ -185,7 +185,7 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
     {
       family: { owner: { name: env.LD_OWNER_NAME, imessage: env.LD_OWNER_IMESSAGE }, timezone: $tz },
       calendar: { sources: [ { account: env.LD_CALENDAR_ACCOUNT, calendar_id: "primary", name: "Personal" } ] },
-      morning_updates: { review_window_hours: 24 },
+      morning_affirmation: { review_window_hours: 24 },
       morning_triage: { ranking_instructions: "", exclude: { imessage_handles: [], email_addresses: [] } },
       calendar_nudge: { lookahead_virtual_minutes: 30, lookahead_in_person_minutes: 60 },
       weather: { location: "Mountain View", lat: 37.386, lon: -122.083 }
@@ -217,6 +217,18 @@ if [ "$NEED_ASSEMBLE" = "0" ] && [ "$(jq -r 'has("weather")' "$LD_CONFIG" 2>/dev
   echo "backfilled weather defaults into the preserved ld-config (ld-weather upgrade)." >&2
 fi
 
+# Preserve-path upgrade: a pre-rename config carries `morning_updates`; the
+# renamed ld-morning-affirmation skill reads `morning_affirmation`. Rename the
+# key in place (operator's window value travels) — same pattern as the weather
+# backfill above, never overwriting an existing `morning_affirmation` section.
+if [ "$NEED_ASSEMBLE" = "0" ]   && [ "$(jq -r 'has("morning_updates") and (has("morning_affirmation") | not)' "$LD_CONFIG" 2>/dev/null)" = "true" ]; then
+  TMP=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  jq '. + { morning_affirmation: .morning_updates } | del(.morning_updates)' "$LD_CONFIG" > "$TMP"
+  chmod 600 "$TMP"
+  mv "$TMP" "$LD_CONFIG"
+  echo "renamed preserved ld-config key morning_updates -> morning_affirmation (rename upgrade)." >&2
+fi
+
 # The three operator inputs arrive EXPORTED in this script's environment (the
 # installer sets them to assemble the config). Clear them now — before the
 # bundle-POST python3 child below — so owner PII is not inherited into that
@@ -242,7 +254,7 @@ fi
 #    no-redirect opener prevents plowd from forwarding Authorization
 #    to another target on an upstream 30x — same pattern as
 #    ld-shared/scripts/post_to_kiosk.py:_NoRedirect.
-BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather)
+BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-affirmation ld-weekly-digest ld-weather)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
     echo "missing bundle: $bundle" >&2
@@ -288,15 +300,16 @@ trap - EXIT
 echo "" >&2
 echo "Agent installed:" >&2
 echo "  6 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
-echo "             ld-morning-updates, ld-weekly-digest, ld-weather) posted" >&2
+echo "             ld-morning-affirmation, ld-weekly-digest, ld-weather) posted" >&2
 echo "             in one transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
 echo "  ld-config resolved at $LD_CONFIG" >&2
 echo "" >&2
-echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
+echo "NOTE: three of the bundles (ld-morning-affirmation, ld-morning-triage," >&2
 echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
 echo "'cron action=add' verb after install — message your Plow agent to" >&2
-echo "set up the morning-updates / morning-triage / weekly-digest crons" >&2
+echo "remove the ld-morning-updates cron if present, then set up the" >&2
+echo "morning-affirmation / morning-triage / weekly-digest crons" >&2
 echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge and" >&2
 echo "ld-weather use plowd's auto-activated scheduled/ entrypoint and need" >&2
 echo "no manual setup." >&2
