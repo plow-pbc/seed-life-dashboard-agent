@@ -111,17 +111,32 @@ test("--dry-run composes but never POSTs", async () => {
   assert.ok(!fetch.calls.some((c) => c.opts.method === "POST"), "no kiosk POST in dry-run");
 });
 
-test("non-https kiosk URL is refused", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: baseConfig(),
-      fetch: fakeFetch(),
-      dashUrl: "http://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /must be https/,
-  );
+test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", async () => {
+  const fetch = fakeFetch();
+  const res = await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: baseConfig(),
+    fetch,
+    dashUrl: "http://rpi5screen:5174/api/message",
+    dashToken: "tok",
+  });
+  assert.equal(res.posted, true);
+});
+
+test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
+  for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
+    await assert.rejects(
+      run({
+        now: new Date("2026-06-09T22:00:00Z"),
+        config: baseConfig(),
+        fetch: fakeFetch(),
+        dashUrl: badUrl,
+        dashToken: "tok",
+      }),
+      /must be http\(s\):\/\//,
+      `expected rejection for ${badUrl}`,
+    );
+  }
 });
 
 test("a failed kiosk POST surfaces loudly", async () => {

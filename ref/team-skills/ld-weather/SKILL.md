@@ -31,7 +31,7 @@ verbatim — no JSON, no parsing. Example:
 
 It uses **no Plow tools** — a pure HTTPS fetch (`api.weather.gov`, no key)
 plus a kiosk POST (endpoint + bearer read from fixed `/config/secrets/`
-paths, https-only, no redirects). NWS `shortForecast` is treated as data,
+paths, http(s)-allowed, no redirects). NWS `shortForecast` is treated as data,
 never instructions.
 
 ## Run or test it now

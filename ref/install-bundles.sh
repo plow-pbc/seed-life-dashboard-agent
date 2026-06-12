@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # seed-life-dashboard-agent — POST this repo's ld-* bundles to local
-# plowd's install endpoint; land the relay's endpoint+token + the
+# plowd's install endpoint; land the env-supplied endpoint+token + the
 # household ld-config in the agent-runtime dir so the bundles can run.
 #
 # Idempotent: re-running re-POSTs every bundle (plowd does atomic-swap-
@@ -11,7 +11,7 @@
 # LD_CALENDAR_ACCOUNT) on first install ONLY; subsequent runs preserve
 # a gate-passing operator-edited config.
 #
-# Relay-state validation + ld-config write happen BEFORE the bundle
+# Input validation + ld-config write happen BEFORE the bundle
 # POST so that no scheduled code is activated until the runtime
 # config + credentials it depends on are known-good.
 
@@ -20,7 +20,6 @@ set -euo pipefail
 PLOW_BUNDLE_ID="${PLOW_BUNDLE_ID:-co.plow.app}"
 APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
 LOCAL_TOKEN="$APP_SUPPORT/agent-runtime/secrets/plow-local-token"
-RELAY_STATE="$HOME/Library/Application Support/seed-life-dashboard-relay/state.json"
 SECRETS_DIR="$APP_SUPPORT/agent-runtime/secrets"
 LD_CONFIG_DIR="$APP_SUPPORT/agent-runtime/runtime/ld"
 LD_CONFIG="$LD_CONFIG_DIR/config.json"
@@ -28,14 +27,6 @@ LD_CONFIG="$LD_CONFIG_DIR/config.json"
 # 1. Required state.
 [ -f "$LOCAL_TOKEN" ] || {
   echo "no plow-local-token at $LOCAL_TOKEN — is seed-plow-app installed and activated?" >&2
-  exit 1
-}
-[ -f "$RELAY_STATE" ] || {
-  echo "no relay state at $RELAY_STATE — install seed-life-dashboard-relay first" >&2
-  exit 1
-}
-[ "$(stat -f '%Lp' "$RELAY_STATE")" = "600" ] || {
-  echo "$RELAY_STATE is not mode 600 — refusing to read" >&2
   exit 1
 }
 
@@ -68,19 +59,25 @@ else
 fi
 PLOWD_URL="http://127.0.0.1:$PLOWD_PORT/marketplace/api/install-local-bundles"
 
-# 4. Validate + extract relay state UPFRONT so a malformed/missing
-#    field aborts the install before plowd is mutated. Both must be
-#    non-empty (whitespace-only fails too); endpoint_url must be
-#    HTTPS. `jq -re` rejects null/missing; the explicit `test("\\S")`
-#    rejects empty-string and whitespace-only values that the seed's
-#    "validate non-empty before mutation" contract requires.
-ENDPOINT_URL=$(jq -re '.endpoint_url | strings | select(test("\\S"))' "$RELAY_STATE") \
-  || { echo "$RELAY_STATE: .endpoint_url missing/empty/whitespace" >&2; exit 1; }
-DASHBOARD_TOKEN=$(jq -re '.dashboard_token | strings | select(test("\\S"))' "$RELAY_STATE") \
-  || { echo "$RELAY_STATE: .dashboard_token missing/empty/whitespace" >&2; exit 1; }
+# 4. Validate the two umbrella/operator-supplied inputs UPFRONT so a
+#    malformed value aborts before plowd is mutated. DASHBOARD_ENDPOINT_URL is
+#    the FULL message-API URL (e.g. http://rpi5screen:5174/api/message) —
+#    written verbatim, no path append. http:// is allowed: the Pi endpoint
+#    rides the household LAN/tailnet, not the public internet.
+ENDPOINT_URL="${DASHBOARD_ENDPOINT_URL:?DASHBOARD_ENDPOINT_URL not set — full /api/message URL of the Pi backend}"
+: "${DASHBOARD_TOKEN:?DASHBOARD_TOKEN not set — bearer the Pi message API validates}"
 case "$ENDPOINT_URL" in
-  https://*) ;;
-  *) echo "$RELAY_STATE: endpoint_url is not HTTPS: $ENDPOINT_URL" >&2; exit 1 ;;
+  http://*|https://*) ;;
+  *) echo "DASHBOARD_ENDPOINT_URL is not http(s)://" >&2; exit 1 ;;
+esac
+case "$ENDPOINT_URL" in
+  */api/message) ;;
+  *) echo "DASHBOARD_ENDPOINT_URL must be the FULL message-API URL ending in /api/message" >&2; exit 1 ;;
+esac
+# One shared rule: neither value may contain ANY whitespace (RFC 6750 bearer
+# tokens and URLs are both whitespace-free; the :? guards reject empty).
+case "$ENDPOINT_URL$DASHBOARD_TOKEN" in
+  *[[:space:]]*) echo "DASHBOARD_ENDPOINT_URL/DASHBOARD_TOKEN must contain no whitespace" >&2; exit 1 ;;
 esac
 
 # 5. Land dashboard secrets BEFORE bundle install — every ld-* bundle's
@@ -89,22 +86,25 @@ esac
 #    against unknown credentials. Atomic write at mode 600 via mktemp
 #    + rename, inside SECRETS_DIR for same-fs atomicity.
 #
-# Per seed-life-dashboard-relay's SEED.md#state-file contract, state.json's
-# `endpoint_url` is the Vercel deployment BASE URL only — this SEED is
-# responsible for appending `/api/message` so the runtime
-# `dashboard-endpoint-url` is the full URL `post_to_kiosk.py` POSTs to.
+# DASHBOARD_ENDPOINT_URL is the FULL message-API URL (already validated
+# in step 4) — written VERBATIM, no path append. The umbrella SEED
+# (seed-life-dashboard) derives and exports this value; a standalone
+# install supplies it directly as an operator input.
 # Use already-validated $ENDPOINT_URL / $DASHBOARD_TOKEN from step 4
-# (not a re-jq) so the values that hit the secret files are the same
-# ones the validation passed.
+# so the values that hit the secret files are the same ones validation passed.
 mkdir -p "$SECRETS_DIR"
 TMP=$(mktemp "$SECRETS_DIR/.dashboard-endpoint-url.XXXXXX")
-printf '%s/api/message' "${ENDPOINT_URL%/}" > "$TMP"
+printf '%s' "$ENDPOINT_URL" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-endpoint-url"
 TMP=$(mktemp "$SECRETS_DIR/.dashboard-token.XXXXXX")
 printf '%s' "$DASHBOARD_TOKEN" > "$TMP"
 chmod 600 "$TMP"
 mv "$TMP" "$SECRETS_DIR/dashboard-token"
+# Clear the secrets from the environment after landing them — same pattern as
+# the LD_* operator inputs below. The ld-config assembly + bundle-POST python3
+# child have no use for these values; secret files are the canonical handoff.
+unset DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN
 
 # 6. Assemble + land ld-config from the three operator inputs on first
 #    install ONLY; preserve a gate-passing operator-edited config on
