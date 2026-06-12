@@ -243,10 +243,12 @@ test("dashboard.card_targets.nudge overrides default card", async () => {
   assert.equal(body.card, "4");
 });
 
-test("null card_targets.nudge falls back to default '2'", async () => {
-  // null is absent-equivalent — key present with JSON null → fall back, no error.
-  const body = await runWithCard({ dashboard: { card_targets: { nudge: null } } });
-  assert.equal(body.card, "2");
+test("null at any config level falls back to default '2'", async () => {
+  // null is absent-equivalent at every level — leaf, card_targets, dashboard.
+  for (const dashboard of [{ card_targets: { nudge: null } }, { card_targets: null }, null]) {
+    const body = await runWithCard({ dashboard });
+    assert.equal(body.card, "2", `default for dashboard ${JSON.stringify(dashboard)}`);
+  }
 });
 
 test("present-but-invalid card_targets.nudge throws (fail-loud)", async () => {

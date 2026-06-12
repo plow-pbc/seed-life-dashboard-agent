@@ -86,19 +86,22 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 
-test("null card_targets.weather falls back to default '3'", async () => {
-  // null is absent-equivalent — key present with JSON null → fall back, no error.
-  const fetch = fakeFetch();
-  await run({
-    now: new Date("2026-06-09T22:00:00Z"),
-    config: { ...baseConfig(), dashboard: { card_targets: { weather: null } } },
-    fetch,
-    dashUrl: "https://kiosk.example/api/message",
-    dashToken: "tok",
-  });
-  const post = fetch.calls.find((c) => c.opts.method === "POST");
-  assert.ok(post, "a kiosk POST happened for null override");
-  assert.equal(JSON.parse(post.opts.body).card, "3");
+test("null at any config level falls back to default '3'", async () => {
+  // null is absent-equivalent at every level — leaf, card_targets, dashboard.
+  const dashboards = [{ card_targets: { weather: null } }, { card_targets: null }, null];
+  for (const dashboard of dashboards) {
+    const fetch = fakeFetch();
+    await run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: { ...baseConfig(), dashboard },
+      fetch,
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    });
+    const post = fetch.calls.find((c) => c.opts.method === "POST");
+    assert.ok(post, `a kiosk POST happened for dashboard ${JSON.stringify(dashboard)}`);
+    assert.equal(JSON.parse(post.opts.body).card, "3");
+  }
 });
 
 test("present-but-invalid card_targets.weather throws (fail-loud)", async () => {
