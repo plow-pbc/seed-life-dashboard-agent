@@ -57,12 +57,12 @@ function resolveCard(config, type, defaultCard) {
   const dashboard = config != null ? config.dashboard : undefined;
   if (dashboard === undefined || dashboard === null) return defaultCard;
   if (typeof dashboard !== "object" || Array.isArray(dashboard)) {
-    throw new Error(`dashboard in config must be an object`);
+    throw new Error("dashboard in config must be an object");
   }
   const cardTargets = dashboard.card_targets;
   if (cardTargets === undefined || cardTargets === null) return defaultCard;
   if (typeof cardTargets !== "object" || Array.isArray(cardTargets)) {
-    throw new Error(`dashboard.card_targets in config must be an object`);
+    throw new Error("dashboard.card_targets in config must be an object");
   }
   const raw = cardTargets[type];
   if (raw === undefined || raw === null) return defaultCard;

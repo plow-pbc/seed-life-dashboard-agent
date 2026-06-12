@@ -130,7 +130,7 @@ def _resolve_card(body_type: str) -> str:
                 if not isinstance(card, str) or not card.strip():
                     sys.exit(
                         f"error: dashboard.card_targets.{body_type} in {CONFIG_FILE} "
-                        f"must be a non-empty string"
+                        "must be a non-empty string"
                     )
                 return card.strip()
 
