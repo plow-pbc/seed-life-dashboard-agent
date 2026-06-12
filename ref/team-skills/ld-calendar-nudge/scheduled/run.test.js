@@ -75,8 +75,16 @@ test("in-window tick with a qualifying meeting posts kiosk + iMessage", async ()
   assert.equal(res.sent, true);
   assert.equal(res.count, 1);
   assert.ok(calls.some((c) => c.url.includes("/calendar.events.list")));
-  assert.ok(calls.some((c) => c.url === "https://dash.test/api/message"));
   assert.ok(calls.some((c) => c.url.includes("/channels/linq/send")));
+  // Kiosk wire body: the viewer requires all three of card/type/text, and the
+  // reminder rides the shared alert slot (card 1) with ld-morning-triage.
+  const kiosk = calls.find((c) => c.url === "https://dash.test/api/message");
+  assert.ok(kiosk, "a kiosk POST happened");
+  const body = JSON.parse(kiosk.body);
+  assert.equal(body.card, "1");
+  assert.equal(body.type, "alert");
+  assert.ok(typeof body.text === "string" && body.text.length > 0);
+  assert.deepEqual(Object.keys(body).sort(), ["card", "text", "type"]);
 });
 
 // In-window but nothing qualifies → silent, no kiosk/iMessage.
