@@ -86,18 +86,20 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 
-test("card defaults to '3' when no config override", async () => {
-  const fetch = fakeFetch();
-  await run({
-    now: new Date("2026-06-09T22:00:00Z"),
-    config: baseConfig(), // no dashboard.card_targets
-    fetch,
-    dashUrl: "https://kiosk.example/api/message",
-    dashToken: "tok",
-  });
-  const post = fetch.calls.find((c) => c.opts.method === "POST");
-  assert.ok(post, "a kiosk POST happened");
-  assert.equal(JSON.parse(post.opts.body).card, "3");
+test("empty-string and numeric card_targets fall back to '3'", async () => {
+  for (const badOverride of ["", "  ", 3, null]) {
+    const fetch = fakeFetch();
+    await run({
+      now: new Date("2026-06-09T22:00:00Z"),
+      config: { ...baseConfig(), dashboard: { card_targets: { weather: badOverride } } },
+      fetch,
+      dashUrl: "https://kiosk.example/api/message",
+      dashToken: "tok",
+    });
+    const post = fetch.calls.find((c) => c.opts.method === "POST");
+    assert.ok(post, `a kiosk POST happened for override ${JSON.stringify(badOverride)}`);
+    assert.equal(JSON.parse(post.opts.body).card, "3", `expected fallback "3" for ${JSON.stringify(badOverride)}`);
+  }
 });
 
 test("dashboard.card_targets.weather overrides default card", async () => {
@@ -135,7 +137,7 @@ test("--dry-run composes but never POSTs", async () => {
     fetch,
     dryRun: true,
   });
-  assert.deepEqual(res, { dryRun: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.deepEqual(res, { dryRun: true, card: "3", text: "Mountain View · 72°F Sunny · H75 L54" });
   assert.ok(!fetch.calls.some((c) => c.opts.method === "POST"), "no kiosk POST in dry-run");
 });
 

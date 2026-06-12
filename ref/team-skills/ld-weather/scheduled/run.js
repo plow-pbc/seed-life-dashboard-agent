@@ -155,15 +155,16 @@ async function run(opts = {}) {
   ]);
   const text = composeWeather(location, hourlyBody, dailyBody);
 
+  // Resolve card slot: config override (string, non-blank) or built-in default "3".
+  const raw = config?.dashboard?.card_targets?.weather;
+  const card = (typeof raw === "string" && raw.trim()) ? raw.trim() : "3";
+
   if (opts.dryRun) {
     // Body-free stderr; the manual-run path (require.main) prints the line to
     // stdout for the operator. Keeps household location out of runner logs.
-    log("dry_run");
-    return { dryRun: true, text };
+    log("dry_run", { card });
+    return { dryRun: true, card, text };
   }
-
-  // Resolve card slot: config override or built-in default "3".
-  const card = config?.dashboard?.card_targets?.weather ?? "3";
 
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));

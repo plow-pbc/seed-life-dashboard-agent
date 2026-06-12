@@ -204,3 +204,48 @@ test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
     );
   }
 });
+
+// ── card resolution ──────────────────────────────────────────────────────────
+
+// Helper: run an in-window tick that returns one qualifying event and
+// captures the kiosk POST body.
+async function runWithCard(configOverrides = {}) {
+  const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+  let postedBody;
+  const fetchImpl = async (url, init) => {
+    if (url.includes("/calendar.events.list")) {
+      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+    }
+    if (init && init.method === "POST" && !url.includes("/channels/")) {
+      postedBody = JSON.parse(init.body);
+    }
+    return { ok: true, async json() { return {}; } };
+  };
+  await run({
+    now,
+    fetch: fetchImpl,
+    config: baseConfig(configOverrides),
+    apiUrl: "https://api.test",
+    apiToken: "tok",
+    dashUrl: "https://dash.test/api/message",
+    dashToken: "dtok",
+  });
+  return postedBody;
+}
+
+test("card defaults to '2' when no config override", async () => {
+  const body = await runWithCard();
+  assert.equal(body.card, "2");
+});
+
+test("dashboard.card_targets.nudge overrides default card", async () => {
+  const body = await runWithCard({ dashboard: { card_targets: { nudge: "4" } } });
+  assert.equal(body.card, "4");
+});
+
+test("empty-string card_targets.nudge falls back to '2'", async () => {
+  for (const bad of ["", "  ", 2, null]) {
+    const body = await runWithCard({ dashboard: { card_targets: { nudge: bad } } });
+    assert.equal(body.card, "2", `expected fallback "2" for override ${JSON.stringify(bad)}`);
+  }
+});

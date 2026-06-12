@@ -100,7 +100,7 @@ async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax
   return items;
 }
 
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
+async function postKiosk(fetchImpl, dashUrl, dashToken, card, text) {
   // The Pi backend rides the household LAN/tailnet, not the public internet —
   // http:// is an accepted trade-off for that trust zone.
   if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
@@ -110,7 +110,7 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "nudge", text }),
+    body: JSON.stringify({ card, type: "nudge", text }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
@@ -185,11 +185,16 @@ async function run(opts = {}) {
   }
 
   const text = composeReminder(qualifying, { timezone });
+
+  // Resolve card slot: config override (string, non-blank) or built-in default "2".
+  const rawCard = config?.dashboard?.card_targets?.nudge;
+  const card = (typeof rawCard === "string" && rawCard.trim()) ? rawCard.trim() : "2";
+
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
 
   // Kiosk first; on a failed kiosk post, surface and stop (don't iMessage).
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, card, text);
   await postImessage(fetchImpl, apiUrl, apiToken, text);
   log("nudge_sent", { count: qualifying.length });
   return { sent: true, count: qualifying.length };
