@@ -5,11 +5,11 @@
 // via opts. Input events MUST be the survivors from filter.js, which
 // have `_minutesUntil` and `_isVirtual` precomputed.
 
-// SKILL.md §Compose caps each reminder at ≤ 200 chars (kiosk is a
+// SKILL.md §Compose caps each reminder at ≤ 115 chars (kiosk is a
 // glanceable shared display). The two unbounded inputs are the event
 // summary and location; truncate the composed line with an ellipsis so
 // the cap holds for a pathological title/location.
-const MAX_REMINDER_CHARS = 200;
+const MAX_REMINDER_CHARS = 115;
 
 function formatLocalTime(startDt, timezone) {
   // Format as "3:50pm" in the household timezone. Intl.DateTimeFormat

@@ -158,7 +158,7 @@ test("long title is truncated but the time/minutes suffix survives", () => {
     hangout_link: "https://meet.google.com/abc",
   });
   const out = composeReminder([evt], { timezone: TZ });
-  assert.ok(out.length <= 200, `expected ≤200-char cap, got ${out.length}`);
+  assert.ok(out.length <= 115, `expected ≤115-char cap, got ${out.length}`);
   // The actionable time/minutes/where must not be chopped off the end.
   assert.match(out, /\(10m\) — online\.$/, `time suffix lost: ${out}`);
   assert.ok(out.includes("…"), "expected ellipsis where the title was cut");
@@ -171,15 +171,15 @@ test("long location is truncated but the time/minutes suffix survives", () => {
     location: "Y".repeat(400),  // pathological location
   });
   const out = composeReminder([evt], { timezone: TZ });
-  assert.ok(out.length <= 200, `expected ≤200-char cap, got ${out.length}`);
+  assert.ok(out.length <= 115, `expected ≤115-char cap, got ${out.length}`);
   assert.ok(out.includes("(25m)"), `minutes lost: ${out}`);
   assert.ok(out.includes('"Sync"'), `summary lost: ${out}`);
 });
 
-test("reminder at or under 200 chars is left intact (no ellipsis)", () => {
+test("reminder at or under 115 chars is left intact (no ellipsis)", () => {
   const evt = survivor({ summary: "Short sync", _minutesUntil: 10, location: "HQ" });
   const out = composeReminder([evt], { timezone: TZ });
-  assert.ok(out.length <= 200);
+  assert.ok(out.length <= 115);
   assert.ok(!out.endsWith("…"));
   assert.ok(out.includes("Short sync"));
 });
