@@ -156,15 +156,19 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
     esac
   done
 
-  # Autodetect IANA timezone: everything after the last /zoneinfo/ in
-  # readlink /etc/localtime; fall back to America/Los_Angeles. Non-PII,
-  # so it is the ONLY value passed to jq via --arg.
-  TZLINK=$(readlink /etc/localtime 2>/dev/null || true)
-  case "$TZLINK" in
-    */zoneinfo/*) LD_TIMEZONE=${TZLINK##*/zoneinfo/} ;;
-    *) LD_TIMEZONE="" ;;
-  esac
-  [ -n "$LD_TIMEZONE" ] || LD_TIMEZONE="America/Los_Angeles"
+  # Timezone: honor a pre-exported LD_TIMEZONE (the installer sets it
+  # after resolving a detected conflict — SEED.md ### ld-config is
+  # landed); otherwise autodetect: everything after the last /zoneinfo/
+  # in readlink /etc/localtime, falling back to America/Los_Angeles.
+  # Non-PII, so it is the ONLY value passed to jq via --arg.
+  if [ -z "${LD_TIMEZONE:-}" ]; then
+    TZLINK=$(readlink /etc/localtime 2>/dev/null || true)
+    case "$TZLINK" in
+      */zoneinfo/*) LD_TIMEZONE=${TZLINK##*/zoneinfo/} ;;
+      *) LD_TIMEZONE="" ;;
+    esac
+    [ -n "$LD_TIMEZONE" ] || LD_TIMEZONE="America/Los_Angeles"
+  fi
 
   # Assemble. The PII values (owner name/handle, calendar account) reach
   # jq ONLY through the environment, read inside the filter via the `env`
