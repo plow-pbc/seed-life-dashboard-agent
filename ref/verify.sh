@@ -144,7 +144,8 @@ spec.loader.exec_module(mod)
 mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
 mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
 mod.MESSAGE_FILE = os.environ["DRY_INPUT"]
-mod.BODY_TYPE = "message"
+mod.CARD = "2"
+mod.BODY_TYPE = "affirmation"
 sys.argv = ["post_to_kiosk.py", "--dry-run"]
 try:
     mod.main()

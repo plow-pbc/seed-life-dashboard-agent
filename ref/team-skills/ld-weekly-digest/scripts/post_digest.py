@@ -2,7 +2,7 @@
 """post_digest.py — post ld-weekly-digest's kiosk digest.
 
 Thin wrapper over `team-skills/ld-shared/scripts/post_to_kiosk.py`: sets
-the bundle-specific MESSAGE_FILE + BODY_TYPE, then dispatches.
+the bundle-specific MESSAGE_FILE + CARD + BODY_TYPE, then dispatches.
 """
 import os
 import sys
@@ -14,6 +14,7 @@ sys.path.insert(
 import post_to_kiosk  # noqa: E402
 
 post_to_kiosk.MESSAGE_FILE = "/tmp/ld-weekly-digest-text"
+post_to_kiosk.CARD = "4"
 post_to_kiosk.BODY_TYPE = "digest"
 
 
