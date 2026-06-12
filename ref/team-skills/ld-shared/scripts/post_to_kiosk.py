@@ -116,13 +116,13 @@ def _resolve_card(body_type: str) -> str:
         # → fallback; a PRESENT node of the wrong type is a config error and
         # fails loud (a silent fallback would misroute the card with exit 0).
         if not isinstance(cfg, dict):
-            sys.exit(f"error: config {CONFIG_FILE} must be a JSON object, got {type(cfg).__name__}")
+            sys.exit(f"error: config {CONFIG_FILE} must be a JSON object")
         dashboard = cfg.get("dashboard")
         if dashboard is not None and not isinstance(dashboard, dict):
-            sys.exit(f"error: dashboard in {CONFIG_FILE} must be an object, got {dashboard!r}")
+            sys.exit(f"error: dashboard in {CONFIG_FILE} must be an object")
         card_targets = dashboard.get("card_targets") if dashboard is not None else None
         if card_targets is not None and not isinstance(card_targets, dict):
-            sys.exit(f"error: dashboard.card_targets in {CONFIG_FILE} must be an object, got {card_targets!r}")
+            sys.exit(f"error: dashboard.card_targets in {CONFIG_FILE} must be an object")
         if card_targets is not None:
             card = card_targets.get(body_type)
             if card is not None:
@@ -130,7 +130,7 @@ def _resolve_card(body_type: str) -> str:
                 if not isinstance(card, str) or not card.strip():
                     sys.exit(
                         f"error: dashboard.card_targets.{body_type} in {CONFIG_FILE} "
-                        f"must be a non-empty string, got {card!r}"
+                        f"must be a non-empty string"
                     )
                 return card.strip()
 

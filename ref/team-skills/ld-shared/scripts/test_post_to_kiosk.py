@@ -411,7 +411,7 @@ def test_invalid_card_config_fails_fast():
     cases = [
         ("numeric leaf", {"dashboard": {"card_targets": {"alert": 3}}}, "card_targets.alert"),
         ("whitespace-only leaf", {"dashboard": {"card_targets": {"alert": "  "}}}, "card_targets.alert"),
-        ("non-dict dashboard", {"dashboard": "x"}, "must be an object, got 'x'"),
+        ("non-dict dashboard", {"dashboard": "x"}, "dashboard in"),  # unique vs the dashboard-token fixture path
         ("non-dict card_targets", {"dashboard": {"card_targets": 5}}, "card_targets"),
         ("non-object top level", ["not", "an", "object"], "JSON object"),
     ]
