@@ -72,7 +72,7 @@ def write_fixtures(
     endpoint: str = "https://x.test/api/message",
     body_type: str = "alert",
     default_card: str | None = "1",
-    config: dict | None = None,
+    config: dict | list | None = None,
 ):
     """Write the three fixed-path inputs to tmp and rebind module constants.
 
@@ -175,12 +175,12 @@ def test_dry_run_redacts_body_and_token():
     distinctive_alert = "Stephanie asked about the proposal yesterday"
     with tempfile.TemporaryDirectory() as d:
         write_fixtures(Path(d), text=distinctive_alert, body_type="alert", default_card="1")
-        code, out, _err = run("--dry-run")
+        code, out, err = run("--dry-run")
         printed = json.loads(out)
     check("dry-run exit zero", code == 0)
     check("method is POST", printed["method"] == "POST")
     check("authorization is redacted", printed["authorization"] == "Bearer <redacted>")
-    check("live token never appears in dry-run stdout", TOKEN not in out)
+    check("live token never appears in dry-run output", TOKEN not in out and TOKEN not in err)
     check("content-type is json", printed["content_type"] == "application/json")
     check("body type matches BODY_TYPE", printed["body"]["type"] == "alert")
     check("body card shown in dry-run (not secret)", printed["body"]["card"] == "1")
@@ -188,7 +188,7 @@ def test_dry_run_redacts_body_and_token():
         "body text is redacted with length",
         printed["body"]["text"] == f"<redacted, {len(distinctive_alert)} chars>",
     )
-    check("live message text never appears in dry-run stdout", distinctive_alert not in out)
+    check("live message text never appears in dry-run output", distinctive_alert not in out and distinctive_alert not in err)
 
 
 class _Failing500Handler(BaseHTTPRequestHandler):
@@ -267,9 +267,9 @@ def test_non_http_schemes_rejected_with_no_token_leak():
     for scheme_url in ("ftp://attacker.test/api/message", "notaurl"):
         with tempfile.TemporaryDirectory() as d:
             write_fixtures(Path(d), endpoint=scheme_url)
-            code, out, _err = run("--dry-run")
+            code, out, err = run("--dry-run")
         check(f"non-http(s) endpoint {scheme_url!r} exits non-zero", code != 0)
-        check(f"bearer token not echoed for {scheme_url!r}", TOKEN not in out)
+        check(f"bearer token not echoed for {scheme_url!r}", TOKEN not in out and TOKEN not in err)
 
 
 class _RedirectHandler(BaseHTTPRequestHandler):
@@ -385,7 +385,7 @@ def test_dry_run_shows_card_from_config():
             default_card="4",
             config={"dashboard": {"card_targets": {"digest": "2"}}},
         )
-        code, out, _err = run("--dry-run")
+        code, out, err = run("--dry-run")
         printed = json.loads(out)
     check("dry-run with config card: exit zero", code == 0)
     check("dry-run with config card: card is '2' (from config)", printed["body"]["card"] == "2")
@@ -411,7 +411,7 @@ def test_invalid_card_config_fails_fast():
     cases = [
         ("numeric leaf", {"dashboard": {"card_targets": {"alert": 3}}}, "card_targets.alert"),
         ("whitespace-only leaf", {"dashboard": {"card_targets": {"alert": "  "}}}, "card_targets.alert"),
-        ("non-dict dashboard", {"dashboard": "x"}, "dashboard"),
+        ("non-dict dashboard", {"dashboard": "x"}, "must be an object, got 'x'"),
         ("non-dict card_targets", {"dashboard": {"card_targets": 5}}, "card_targets"),
         ("non-object top level", ["not", "an", "object"], "JSON object"),
     ]
