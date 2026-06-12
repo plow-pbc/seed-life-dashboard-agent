@@ -127,28 +127,27 @@ echo "hello from verify" > "$DRY_INPUT"
 # output goes to a private mktemp file (not a fixed world-readable
 # /tmp path) to avoid symlink/TOCTOU + concurrent-run collisions.
 DRY_RC=0
-PYTHONPATH="$SEED_ROOT/ref/team-skills/ld-shared/scripts" \
+WRAPPER="$SEED_ROOT/ref/team-skills/ld-morning-updates/scripts/post_message.py" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
 DRY_INPUT="$DRY_INPUT" \
 python3 - >"$DRY_OUT" 2>&1 <<'PY' || DRY_RC=$?
 import os, sys, importlib.util
-spec = importlib.util.spec_from_file_location(
-    "post_to_kiosk",
-    os.path.join(os.environ["PYTHONPATH"], "post_to_kiosk.py"),
-)
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-# Rebind the module-level constants to point at our host-side secrets
-# (the wrapper normally hardcodes the VM paths /config/secrets/...).
-mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
-mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
-mod.MESSAGE_FILE = os.environ["DRY_INPUT"]
-mod.CARD = "2"
-mod.BODY_TYPE = "affirmation"
-sys.argv = ["post_to_kiosk.py", "--dry-run"]
+# Load a REAL wrapper so its CARD/BODY_TYPE assignments are load-bearing:
+# a wrapper missing the CARD contract must fail this check, not be masked
+# by verify assigning the constants itself.
+spec = importlib.util.spec_from_file_location("post_message", os.environ["WRAPPER"])
+wrapper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(wrapper)
+ptk = wrapper.post_to_kiosk
+# Rebind ONLY the host-side file paths (the wrapper hardcodes the VM
+# paths /config/secrets/... and its /tmp message file).
+ptk.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
+ptk.TOKEN_FILE = os.environ["TOKEN_FILE"]
+ptk.MESSAGE_FILE = os.environ["DRY_INPUT"]
+sys.argv = ["post_message.py", "--dry-run"]
 try:
-    mod.main()
+    ptk.main()
 except SystemExit as e:
     # main() may exit normally; a clean exit is fine for --dry-run
     if e.code not in (None, 0):
