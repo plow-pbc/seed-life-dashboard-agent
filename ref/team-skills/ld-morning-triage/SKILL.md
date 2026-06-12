@@ -7,7 +7,7 @@ description: Post the life-dashboard kiosk's morning *alert* — the one most-im
 
 Surface the *one* unaddressed inbound message from the last 36 hours
 that the user should pay attention to today, and post it to the
-life-dashboard kiosk as `type: alert`. Runs every morning at 07:05
+life-dashboard kiosk as card 1, `type: alert`. Runs every morning at 07:05
 in `family.timezone`, five minutes after the affirmation
 (`ld-morning-updates`), so the two cron ticks remain visually distinct
 in `cron list`.
