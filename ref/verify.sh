@@ -167,6 +167,10 @@ wrapper_spec.loader.exec_module(wrapper_mod)
 #    influence card resolution (absent file -> DEFAULT_CARD).
 mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
 mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
+# The wrapper's contract includes setting MESSAGE_FILE — prove it did
+# before masking it with the fixture (truthiness, not an exact path:
+# pinning the path here would just re-hardcode it in verify).
+assert mod.MESSAGE_FILE, "wrapper did not set MESSAGE_FILE"
 mod.MESSAGE_FILE = os.environ["DRY_INPUT"]
 cfg_dir = tempfile.mkdtemp()
 mod.CONFIG_FILE = os.path.join(cfg_dir, "no-such-config.json")
