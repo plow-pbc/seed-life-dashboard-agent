@@ -123,6 +123,9 @@ Privacy boundary below.
 Write **one or two short sentences, ≤115 characters total** (the kiosk
 card ellipsizes anything longer mid-thought) — warm, encouraging, for the
 whole family. Vary the tone and wording day to day; never sound templated.
+If the draft runs over 115 chars, regenerate once; if it is still over,
+post it anyway — a clamped card beats a missing one (the viewer's line
+clamp is the backstop).
 
 **Anchor it in something specific from the gathered context.** Generic
 "big day team, plenty on the calendar" is a failure mode — the
