@@ -385,7 +385,7 @@ def test_dry_run_shows_card_from_config():
             default_card="4",
             config={"dashboard": {"card_targets": {"digest": "2"}}},
         )
-        code, out, err = run("--dry-run")
+        code, out, _err = run("--dry-run")
         printed = json.loads(out)
     check("dry-run with config card: exit zero", code == 0)
     check("dry-run with config card: card is '2' (from config)", printed["body"]["card"] == "2")
