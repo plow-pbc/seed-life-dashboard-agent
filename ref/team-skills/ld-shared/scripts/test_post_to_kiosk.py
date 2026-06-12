@@ -395,31 +395,28 @@ def test_malformed_json_config_fails_fast():
     check("malformed JSON config exits non-zero", code != 0)
 
 
-def test_numeric_card_target_fails_fast():
-    """A card_targets value that is a number (not a string) must exit non-zero
-    with a message naming the key — not silently fall back to DEFAULT_CARD."""
-    with tempfile.TemporaryDirectory() as d:
-        write_fixtures(
-            Path(d),
-            body_type="alert",
-            default_card="1",
-            config={"dashboard": {"card_targets": {"alert": 3}}},
-        )
-        code, _ = run("--dry-run")
-    check("numeric card_target exits non-zero", code != 0)
-
-
-def test_whitespace_only_card_target_fails_fast():
-    """A card_targets value that is whitespace-only must exit non-zero."""
-    with tempfile.TemporaryDirectory() as d:
-        write_fixtures(
-            Path(d),
-            body_type="alert",
-            default_card="1",
-            config={"dashboard": {"card_targets": {"alert": "  "}}},
-        )
-        code, _ = run("--dry-run")
-    check("whitespace-only card_target exits non-zero", code != 0)
+def test_invalid_card_config_fails_fast():
+    """A PRESENT-but-invalid override or wrong-shape config node must exit
+    non-zero with a clear message — never silently fall back to DEFAULT_CARD
+    (a silent fallback would misroute the card with exit 0). Absent / null
+    nodes are the legitimate fallback (covered by the tests above)."""
+    cases = [
+        ("numeric leaf", {"dashboard": {"card_targets": {"alert": 3}}}),
+        ("whitespace-only leaf", {"dashboard": {"card_targets": {"alert": "  "}}}),
+        ("non-dict dashboard", {"dashboard": "x"}),
+        ("non-dict card_targets", {"dashboard": {"card_targets": 5}}),
+        ("non-object top level", ["not", "an", "object"]),
+    ]
+    for label, cfg in cases:
+        with tempfile.TemporaryDirectory() as d:
+            write_fixtures(
+                Path(d),
+                body_type="alert",
+                default_card="1",
+                config=cfg,
+            )
+            code, _ = run("--dry-run")
+        check(f"invalid card config ({label}) exits non-zero", code != 0)
 
 
 def test_dashboard_null_falls_back_to_default():
@@ -509,8 +506,7 @@ def main():
     test_missing_card_no_config_no_default_fails_fast()
     test_dry_run_shows_card_from_config()
     test_malformed_json_config_fails_fast()
-    test_numeric_card_target_fails_fast()
-    test_whitespace_only_card_target_fails_fast()
+    test_invalid_card_config_fails_fast()
     test_dashboard_null_falls_back_to_default()
     test_wrapper_contracts()
     print(f"\n{passed} passed, {failed} failed")

@@ -217,6 +217,18 @@ if [ "$NEED_ASSEMBLE" = "0" ] && [ "$(jq -r 'has("weather")' "$LD_CONFIG" 2>/dev
   echo "backfilled weather defaults into the preserved ld-config (ld-weather upgrade)." >&2
 fi
 
+# Preserve-path upgrade: a pre-rename config carries `morning_updates`; the
+# renamed ld-morning-affirmation skill reads `morning_affirmation`. Rename the
+# key in place (operator's window value travels) — same pattern as the weather
+# backfill above, never overwriting an existing `morning_affirmation` section.
+if [ "$NEED_ASSEMBLE" = "0" ]   && [ "$(jq -r 'has("morning_updates") and (has("morning_affirmation") | not)' "$LD_CONFIG" 2>/dev/null)" = "true" ]; then
+  TMP=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  jq '. + { morning_affirmation: .morning_updates } | del(.morning_updates)' "$LD_CONFIG" > "$TMP"
+  chmod 600 "$TMP"
+  mv "$TMP" "$LD_CONFIG"
+  echo "renamed preserved ld-config key morning_updates -> morning_affirmation (rename upgrade)." >&2
+fi
+
 # The three operator inputs arrive EXPORTED in this script's environment (the
 # installer sets them to assemble the config). Clear them now — before the
 # bundle-POST python3 child below — so owner PII is not inherited into that
