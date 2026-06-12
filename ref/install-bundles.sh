@@ -308,7 +308,8 @@ echo "" >&2
 echo "NOTE: three of the bundles (ld-morning-affirmation, ld-morning-triage," >&2
 echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
 echo "'cron action=add' verb after install — message your Plow agent to" >&2
-echo "set up the morning-affirmation / morning-triage / weekly-digest crons" >&2
+echo "remove the ld-morning-updates cron if present, then set up the" >&2
+echo "morning-affirmation / morning-triage / weekly-digest crons" >&2
 echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge and" >&2
 echo "ld-weather use plowd's auto-activated scheduled/ entrypoint and need" >&2
 echo "no manual setup." >&2
