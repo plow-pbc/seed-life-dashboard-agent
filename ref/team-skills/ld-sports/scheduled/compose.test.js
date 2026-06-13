@@ -61,6 +61,50 @@ test("gameRow returns null when the followed team isn't in the game", () => {
   assert.equal(gameRow(c, "SF", "America/Los_Angeles"), null);
 });
 
+test("gameRow: a tie greys neither score (no leader)", () => {
+  const c = comp("post", competitor("away", "SF", "4"), competitor("home", "LAD", "4"));
+  const row = gameRow(c, "SF", "America/Los_Angeles");
+  assert.equal(row.cells[1].dim, undefined);
+  assert.equal(row.cells[3].dim, undefined);
+});
+
+test("composeSports: a game two followed teams share renders ONE row (no dup)", () => {
+  // SF and LAD (both followed, both MLB) play each other — the demo set's
+  // head-to-head day. Each team scans the same scoreboard; the event must not
+  // be emitted twice.
+  const headToHead = { id: "401", competitions: [comp("post", competitor("away", "SF", "5"), competitor("home", "LAD", "3"))] };
+  const spec = composeSports(
+    [{ abbr: "SF", league: "mlb" }, { abbr: "LAD", league: "mlb" }],
+    { mlb: { events: [headToHead] } },
+    "America/Los_Angeles",
+  );
+  assert.equal(spec.rows.length, 1);
+  assert.equal(spec.rows[0].cells[0].star, true); // SF (first followed) is starred
+});
+
+test("composeSports: prefers a live game over a finished one (state, not order)", () => {
+  const events = [
+    { id: "1", competitions: [comp("post", competitor("away", "SF", "2"), competitor("home", "NYM", "1"))] },
+    { id: "2", competitions: [comp("in", competitor("away", "SF", "0"), competitor("home", "LAD", "0"), { shortDetail: "Top 1st" })] },
+  ];
+  const spec = composeSports([{ abbr: "SF", league: "mlb" }], { mlb: { events } }, "America/Los_Angeles");
+  assert.equal(spec.rows.length, 1);
+  assert.equal(spec.rows[0].cells[2].cells[0].value, "Top 1st"); // the live game won
+});
+
+test("composeSports: reads status/date nested on the EVENT, not the competition", () => {
+  // ESPN sometimes carries status/date on the event; composeSports merges it down.
+  const ev = {
+    id: "9",
+    status: { type: { state: "pre" } },
+    date: "2026-06-12T22:40Z",
+    competitions: [{ competitors: [competitor("away", "SF", "0"), competitor("home", "LAD", "0")] }],
+  };
+  const spec = composeSports([{ abbr: "SF", league: "mlb" }], { mlb: { events: [ev] } }, "America/Los_Angeles");
+  assert.equal(spec.rows.length, 1);
+  assert.match(spec.rows[0].cells[2].cells[0].value, /\d:\d\d/); // upcoming → a tip-off time
+});
+
 test("composeSports: one row per followed team, across leagues; empty → null", () => {
   const scoreboards = {
     mlb: { events: [{ competitions: [comp("post", competitor("away", "SF", "8"), competitor("home", "LAD", "3"))] }] },

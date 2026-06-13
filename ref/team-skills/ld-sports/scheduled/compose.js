@@ -104,28 +104,63 @@ function gameRow(comp, followedAbbr, tz) {
   };
 }
 
+// ESPN nests status/date on the event; mirror onto the competition so
+// gameState/centerText read one shape. Returns null when the event has no
+// competition.
+function competition(ev) {
+  const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
+  return comp ? { ...comp, status: comp.status ?? ev.status, date: comp.date ?? ev.date } : null;
+}
+
+// Which of a team's events to show: prefer an in-progress game, then an upcoming
+// one, then a final (ESPN's same-day slate isn't ordered by state, and a
+// doubleheader can list a finished game ahead of a live one).
+const STATE_RANK = { live: 0, upcoming: 1, final: 2 };
+function pickEvent(events, abbr) {
+  let best = null;
+  for (const ev of Array.isArray(events) ? events : []) {
+    const comp = competition(ev);
+    const state = comp && gameState(comp);
+    if (!state) continue;
+    const involves = (Array.isArray(comp.competitors) ? comp.competitors : []).some(
+      (c) => c?.team?.abbreviation === abbr,
+    );
+    if (!involves) continue;
+    if (!best || STATE_RANK[state] < STATE_RANK[best.state]) best = { ev, comp, state };
+  }
+  return best;
+}
+
+// A stable per-event identity for de-duping a game two followed teams share
+// (e.g. the SF/LAD demo set on a head-to-head day): the ESPN event id, or the
+// unordered abbr pair as a fallback.
+function eventKey(comp, evId) {
+  if (evId != null) return String(evId);
+  const abbrs = (Array.isArray(comp?.competitors) ? comp.competitors : [])
+    .map((c) => c?.team?.abbreviation ?? "?")
+    .sort();
+  return abbrs.join("@");
+}
+
 // Given the followed-team list [{abbr, league}] and a map league→ESPN scoreboard
-// body, build the full tile-spec. Each followed team contributes at most its one
-// current/next game row. An empty result → null so run.js posts nothing and the
-// kiosk keeps its quiet placeholder (never fake data).
+// body, build the full tile-spec — one row per distinct game, picking each
+// team's best-state event and rendering a shared game only once. Empty → null so
+// run.js posts nothing and the kiosk keeps its quiet placeholder (never fakes).
 function composeSports(followed, scoreboards, tz) {
   const rows = [];
+  const seen = new Set();
   for (const { abbr, league } of followed) {
-    const events = scoreboards[league]?.events;
-    if (!Array.isArray(events)) continue;
-    for (const ev of events) {
-      const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
-      // ESPN nests status on the event; mirror it onto the competition so
-      // gameState/centerText read one shape.
-      const merged = comp ? { ...comp, status: comp.status ?? ev.status, date: comp.date ?? ev.date } : null;
-      const row = merged ? gameRow(merged, abbr, tz) : null;
-      if (row) {
-        rows.push(row);
-        break; // one game per followed team (the soonest/active one)
-      }
+    const best = pickEvent(scoreboards[league]?.events, abbr);
+    if (!best) continue;
+    const key = `${league}:${eventKey(best.comp, best.ev?.id)}`;
+    if (seen.has(key)) continue; // a game both followed teams are in → one row
+    const row = gameRow(best.comp, abbr, tz);
+    if (row) {
+      seen.add(key);
+      rows.push(row);
     }
   }
   return rows.length ? { rows } : null;
 }
 
-module.exports = { composeSports, gameRow, gameState, side, centerText, color };
+module.exports = { composeSports, pickEvent, gameRow, gameState, side, centerText, color };

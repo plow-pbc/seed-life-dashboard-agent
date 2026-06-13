@@ -23,11 +23,14 @@ installing the bundle is enough.
 `run.js` reads `weather.{location,lat,lon}` from `/config/runtime/ld/config.json`
 (NWS reports °F for US points — Fahrenheit-only by contract, no units knob),
 resolves the NWS gridpoint, fetches the
-hourly + daily forecast, composes one glanceable line (`compose.js`), and
-posts it to the kiosk as card 3, `type: weather`. The kiosk renders the line
-verbatim — no JSON, no parsing. Example:
+hourly + daily forecast, composes the generic tile-spec (`compose.js`), and
+posts it to the kiosk as card 3, `type: weather`. The kiosk renders the tile-spec
+generically (the same vocabulary the sports card uses — no weather-specific
+viewer code). The card shows a hero current temperature + condition, then a muted
+meta line with the location and the forecast high/low, e.g.:
 
-    Mountain View · 72°F Sunny · H77 L55
+    67°  Sunny
+    Mountain View · H88 · L60
 
 It uses **no Plow tools** — a pure HTTPS fetch (`api.weather.gov`, no key)
 plus a kiosk POST (endpoint + bearer read from fixed `/config/secrets/`

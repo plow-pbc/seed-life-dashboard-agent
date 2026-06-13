@@ -15,7 +15,7 @@
 // lands in the window each hour.)
 //
 // When it runs: resolve the NWS gridpoint from weather.lat/lon, fetch the
-// hourly + daily forecast, compose one glanceable line (compose.js), and post
+// hourly + daily forecast, compose the generic tile-spec (compose.js), and post
 // it to the kiosk as card 3 / type:weather (the viewer requires all three of
 // card/type/text; type renders verbatim as the card's eyebrow). No LLM,
 // deterministic. No iMessage — weather is an ambient card, not a notification.
