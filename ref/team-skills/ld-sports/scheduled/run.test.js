@@ -115,9 +115,7 @@ test("two followed teams in the same game dedupe to one row, both starred", asyn
       },
     ],
   };
-  const calls = [];
-  const fetch = async (url, opts = {}) => {
-    calls.push({ url, opts });
+  const fetch = async (url) => {
     if (url.includes("/baseball/mlb/")) return json({ events: [event] });
     return { ok: true, status: 200, json: async () => ({}) };
   };
