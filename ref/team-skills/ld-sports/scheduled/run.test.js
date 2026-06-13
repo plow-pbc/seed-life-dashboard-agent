@@ -99,6 +99,41 @@ test("in-window tick fetches followed teams, composes, and posts card 5 / type:s
   assert.ok(fetch.calls.some((c) => c.url.includes("/basketball/nba/scoreboard")));
 });
 
+test("two followed teams in the same game dedupe to one row, both starred", async () => {
+  // SF and LAD are both followed and play each other: each per-team fetch parses
+  // the same matchup, so the rendered tile must show ONE row with BOTH sides starred.
+  const event = {
+    id: "401",
+    date: "2026-06-12T02:10Z",
+    competitions: [
+      {
+        status: { type: { state: "in", shortDetail: "Bot 7th" } },
+        competitors: [
+          { homeAway: "home", score: "4", team: { abbreviation: "SF", displayName: "Giants", logo: "https://a.espncdn.com/sf.png", color: "FD5A1E", alternateColor: "27251F" } },
+          { homeAway: "away", score: "2", team: { abbreviation: "LAD", displayName: "Dodgers", logo: "https://a.espncdn.com/lad.png", color: "005A9C", alternateColor: "EF3E42" } },
+        ],
+      },
+    ],
+  };
+  const calls = [];
+  const fetch = async (url, opts = {}) => {
+    calls.push({ url, opts });
+    if (url.includes("/baseball/mlb/")) return json({ events: [event] });
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  const res = await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: { family: { timezone: TZ }, sports: { followed: [{ abbr: "sf", sport: "baseball", league: "mlb" }, { abbr: "lad", sport: "baseball", league: "mlb" }] } },
+    fetch,
+    dashUrl: "https://kiosk.example/api/message",
+    dashToken: "tok",
+  });
+  assert.equal(res.posted, true);
+  // One game row, two starred sides (★ for each followed team).
+  assert.equal((res.text.match(/sp-game/g) || []).length, 1);
+  assert.equal((res.text.match(/sp-star">★/g) || []).length, 2);
+});
+
 test("a single team's feed error is skipped, not fatal", async () => {
   const fetch = (url, opts = {}) => {
     if (url.includes("/basketball/nba/")) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
@@ -147,51 +182,20 @@ test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", asyn
   assert.equal(res.posted, true);
 });
 
-test("non-http(s) kiosk URL is refused", async () => {
-  for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
+test("run fails loud for invalid runtime inputs", async () => {
+  const inWindow = new Date("2026-06-09T22:00:00Z");
+  const cases = [
+    { name: "non-http(s) dashboard URL", config: baseConfig(), fetch: fakeFetch(), dashUrl: "ftp://kiosk.example/api/message", error: /must be http\(s\):\/\// },
+    { name: "garbage dashboard URL", config: baseConfig(), fetch: fakeFetch(), dashUrl: "notaurl", error: /must be http\(s\):\/\// },
+    { name: "kiosk 502", config: baseConfig(), fetch: fakeFetch({ kioskOk: false }), dashUrl: "https://kiosk.example/api/message", error: /kiosk POST 502/ },
+    { name: "missing family.timezone", config: { sports: baseConfig().sports }, fetch: fakeFetch(), dashUrl: "https://kiosk.example/api/message", error: /timezone/ },
+    { name: "missing sports.followed", config: baseConfig({ sports: {} }), fetch: fakeFetch(), dashUrl: "https://kiosk.example/api/message", error: /sports\.followed/ },
+  ];
+  for (const c of cases) {
     await assert.rejects(
-      run({ now: new Date("2026-06-09T22:00:00Z"), config: baseConfig(), fetch: fakeFetch(), dashUrl: badUrl, dashToken: "tok" }),
-      /must be http\(s\):\/\//,
-      `expected rejection for ${badUrl}`,
+      run({ now: inWindow, config: c.config, fetch: c.fetch, dashUrl: c.dashUrl, dashToken: "tok" }),
+      c.error,
+      `expected rejection for ${c.name}`,
     );
   }
-});
-
-test("a failed kiosk POST surfaces loudly", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: baseConfig(),
-      fetch: fakeFetch({ kioskOk: false }),
-      dashUrl: "https://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /kiosk POST 502/,
-  );
-});
-
-test("missing family.timezone fails loud", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: { sports: baseConfig().sports }, // no family.timezone
-      fetch: fakeFetch(),
-      dashUrl: "https://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /timezone/,
-  );
-});
-
-test("missing sports.followed fails loud", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: baseConfig({ sports: {} }),
-      fetch: fakeFetch(),
-      dashUrl: "https://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /sports\.followed/,
-  );
 });

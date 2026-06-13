@@ -26,7 +26,10 @@ resolves the NWS gridpoint, fetches the
 hourly + daily forecast, composes the weather tile HTML (`compose.js`), and
 posts it to the kiosk as card 3, `type: weather`. The kiosk renders the HTML
 verbatim (`dangerouslySetInnerHTML`) into the card — the styling lives in the
-viewer's shared `.weather-*` CSS, so the producer ships only the markup. The
+viewer's shared `.weather-*` CSS, so the producer ships only the markup. This
+makes an **HTML-capable `seed-life-dashboard-viewer`** (the generic box-renderer
++ `.weather-*` CSS, PR #40) a required runtime: against an older viewer that
+does not render card HTML, the card shows literal tags. The
 tile shows the current temp big, the condition, and the location + H/L beneath:
 
     <div class="weather"><div class="weather-now"><span class="weather-temp">72°</span><span class="weather-cond">Sunny</span></div><div class="weather-meta"><span>Mountain View</span><span>H77 · L55</span></div></div>

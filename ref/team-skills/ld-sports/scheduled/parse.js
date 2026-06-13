@@ -16,15 +16,32 @@ function hexColor(v) {
   return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h.toUpperCase()}` : null;
 }
 
-// One competitor → a render-ready side. Logo only if a real https URL; colors
-// fall back to neutral so the monogram never renders an empty swatch.
+// A feed-supplied logo URL is UNTRUSTED data emitted as <img src> on the kiosk:
+// accept only HTTPS on an ESPN CDN host, else null (monogram fallback). This
+// stops a steered feed from driving the kiosk browser to fetch an arbitrary
+// host despite the scoreboard fetch itself being host-pinned in run.js.
+function safeLogo(url) {
+  if (typeof url !== "string") return null;
+  let host;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return null;
+    host = u.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return host === "espncdn.com" || host.endsWith(".espncdn.com") ? url : null;
+}
+
+// One competitor → a render-ready side. Logo only via the ESPN-CDN allowlist;
+// colors fall back to neutral so the monogram never renders an empty swatch.
 function sideOf(competitor) {
   const t = competitor.team || {};
   const score = competitor.score != null && competitor.score !== "" ? Number(competitor.score) : null;
   return {
     abbr: t.abbreviation || "?",
     name: t.displayName || t.abbreviation || "?",
-    logo: typeof t.logo === "string" && /^https?:\/\//.test(t.logo) ? t.logo : null,
+    logo: safeLogo(t.logo),
     colors: { primary: hexColor(t.color) || "#6B7280", secondary: hexColor(t.alternateColor) || "#FFFFFF" },
     score: Number.isFinite(score) ? score : null,
     followed: false,
@@ -63,7 +80,11 @@ function parseGameFor(scoreboard, abbr, tz, now = new Date()) {
     const home = homeAway === "home" ? followed : opp;
     const d = new Date(ev.date);
     const valid = !Number.isNaN(d.getTime());
+    // Stable key so two followed teams in the same matchup (SF + LAD) dedupe to
+    // one row. ESPN event id when present, else the orientation-stable matchup.
+    const key = ev.id != null ? `id:${ev.id}` : `mu:${ev.date}|${away.abbr}@${home.abbr}`;
     return {
+      key,
       state,
       away,
       home,

@@ -39,6 +39,19 @@ test("sideOf falls back to neutral colors and drops a non-https logo", () => {
   assert.equal(s.followed, false);
 });
 
+test("sideOf accepts only HTTPS ESPN-CDN logos; untrusted feed URLs → null", () => {
+  const logoOf = (logo) => sideOf({ team: { abbreviation: "SF", logo } }).logo;
+  // Allowed: HTTPS on espncdn.com and its subdomains.
+  assert.equal(logoOf("https://a.espncdn.com/sf.png"), "https://a.espncdn.com/sf.png");
+  assert.equal(logoOf("https://a1-3.espncdn.com/sf.png"), "https://a1-3.espncdn.com/sf.png");
+  assert.equal(logoOf("https://espncdn.com/sf.png"), "https://espncdn.com/sf.png");
+  // Rejected: a feed-driven fetch to an arbitrary host or over plain HTTP.
+  assert.equal(logoOf("http://192.168.1.1/logo.png"), null); // HTTP IP → null
+  assert.equal(logoOf("https://evil.example.com/logo.png"), null); // non-ESPN HTTPS → null
+  assert.equal(logoOf("https://espncdn.com.evil.com/logo.png"), null); // suffix-spoof → null
+  assert.equal(logoOf("not a url"), null);
+});
+
 test("parseGameFor orients away/home by ESPN homeAway and flags the followed side", () => {
   const sb = { events: [event({ mineHome: true })] };
   const g = parseGameFor(sb, "sf", "America/Los_Angeles");

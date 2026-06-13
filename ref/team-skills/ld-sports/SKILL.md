@@ -24,7 +24,10 @@ registration to set up** — installing the bundle is enough.
 parses the team's current game (`parse.js`), builds the scoreboard tile HTML
 (`compose.js`), and posts it to the kiosk as card 5, `type: sports`. The kiosk
 renders the HTML verbatim (`dangerouslySetInnerHTML`) — the styling lives in the
-viewer's shared `.sp-*` CSS, so the producer ships only the markup. A team with
+viewer's shared `.sp-*` CSS, so the producer ships only the markup. This makes
+an **HTML-capable `seed-life-dashboard-viewer`** (the generic box-renderer +
+`.sp-*` CSS, PR #40) a required runtime: against an older viewer that does not
+render card HTML, the card shows literal tags. A team with
 no game today simply contributes no row; a single team's feed hiccup is logged
 and skipped (one bad team never blanks the whole tile).
 
