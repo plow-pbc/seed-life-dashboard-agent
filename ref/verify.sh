@@ -77,7 +77,7 @@ fi
 echo "OK   v-ld-config"
 
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
-# SKILL.md); the other five are full skills with SKILL.md.
+# SKILL.md); the other six are full skills with SKILL.md.
 declare -a probes=(
   "ld-shared/scripts/post_to_kiosk.py"
   "ld-calendar-nudge/SKILL.md"
@@ -85,6 +85,7 @@ declare -a probes=(
   "ld-morning-updates/SKILL.md"
   "ld-weekly-digest/SKILL.md"
   "ld-weather/SKILL.md"
+  "ld-sports/SKILL.md"
 )
 
 # Bundle install location varies by plowd build:

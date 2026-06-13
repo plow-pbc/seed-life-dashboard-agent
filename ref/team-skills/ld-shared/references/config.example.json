@@ -35,5 +35,13 @@
     "location": "Mountain View",
     "lat": 37.386,
     "lon": -122.083
+  },
+  "sports": {
+    "_comment": "Followed teams for the kiosk sports card. Demo default — customize to your teams. abbr = ESPN team abbreviation; sport/league name its ESPN scoreboard.",
+    "followed": [
+      { "abbr": "sf", "sport": "baseball", "league": "mlb" },
+      { "abbr": "lad", "sport": "baseball", "league": "mlb" },
+      { "abbr": "gsw", "sport": "basketball", "league": "nba" }
+    ]
   }
 }

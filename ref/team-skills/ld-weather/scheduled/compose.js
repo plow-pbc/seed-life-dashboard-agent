@@ -3,8 +3,17 @@
 // Pure weather composer for ld-weather (Pattern B — runs under the generic
 // plow-scheduled-runner via run.js). No HTTP, no FS, no clock: run.js fetches
 // the NWS forecast bodies and passes them here. This module is the SINGLE
-// source of truth for the displayed line — SKILL.md does not restate the
-// transform.
+// source of truth for the weather tile HTML the kiosk renders verbatim
+// (dangerouslySetInnerHTML) — SKILL.md does not restate the transform. The
+// HTML targets the viewer's shared .weather-* CSS.
+
+// Minimal HTML escape for the few text fields we interpolate (location,
+// condition). Not a security boundary — the writer is trusted, bearer-gated,
+// loopback-read — just keeps a stray "&"/"<" in a feed from breaking the
+// fragment.
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
 
 // NWS `shortForecast` can be a compound phrase like "Patchy Fog then Sunny".
 // Keep the clause after the last " then " so the kiosk condition stays a
@@ -52,15 +61,20 @@ function extractWeather(hourly, daily) {
   };
 }
 
-// Format the one glanceable line the kiosk renders verbatim, e.g.
-//   "Mountain View · 72°F Sunny · H77 L55"
-// A blank/absent location drops the leading "<location> · " segment.
+// Build the weather tile the kiosk renders verbatim: a big current temp + the
+// condition, with the location and the day's H/L beneath. A blank/absent
+// location renders an empty meta slot (no stray separator).
 function formatWeather({ location, tempF, condition, highF, lowF }) {
-  const head = location ? `${location} · ` : "";
-  return `${head}${tempF}°F ${condition} · H${highF} L${lowF}`;
+  return (
+    `<div class="weather">` +
+    `<div class="weather-now"><span class="weather-temp">${esc(tempF)}°</span>` +
+    `<span class="weather-cond">${esc(condition)}</span></div>` +
+    `<div class="weather-meta"><span>${esc(location || "")}</span>` +
+    `<span>H${esc(highF)} · L${esc(lowF)}</span></div></div>`
+  );
 }
 
-// Convenience: NWS bodies + location → the display line.
+// Convenience: NWS bodies + location → the tile HTML.
 function composeWeather(location, hourly, daily) {
   return formatWeather({ location, ...extractWeather(hourly, daily) });
 }

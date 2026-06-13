@@ -81,20 +81,32 @@ test("extractWeather fails loud on a malformed feed", () => {
   );
 });
 
-test("formatWeather renders the glanceable line with location", () => {
-  assert.equal(
-    formatWeather({ location: "Mountain View", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 }),
-    "Mountain View · 72°F Sunny · H77 L55",
-  );
+test("formatWeather renders the weather tile with the displayed fields", () => {
+  const html = formatWeather({ location: "Mountain View", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 });
+  assert.match(html, /class="weather"/);
+  assert.match(html, /class="weather-temp">72°</);
+  assert.match(html, /class="weather-cond">Sunny</);
+  assert.match(html, /Mountain View/);
+  assert.match(html, /H77 · L55/);
 });
 
-test("formatWeather drops the location segment when absent", () => {
-  assert.equal(
-    formatWeather({ location: "", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 }),
-    "72°F Sunny · H77 L55",
-  );
+test("formatWeather renders an empty location slot when absent (no stray separator)", () => {
+  const html = formatWeather({ location: "", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 });
+  assert.match(html, /class="weather-meta"><span></);
+  assert.match(html, /H77 · L55/);
 });
 
-test("composeWeather end-to-end: fixtures → display line", () => {
-  assert.equal(composeWeather("Mountain View", hourly(72), daily(75, 54, "Partly Cloudy")), "Mountain View · 72°F Partly Cloudy · H75 L54");
+test("formatWeather escapes interpolated text fields", () => {
+  const html = formatWeather({ location: "A & B", tempF: 72, condition: "Sun <storm>", highF: 77, lowF: 55 });
+  assert.match(html, /A &amp; B/);
+  assert.match(html, /Sun &lt;storm&gt;/);
+  assert.doesNotMatch(html, /<storm>/);
+});
+
+test("composeWeather end-to-end: fixtures → tile HTML", () => {
+  const html = composeWeather("Mountain View", hourly(72), daily(75, 54, "Partly Cloudy"));
+  assert.match(html, /class="weather-temp">72°</);
+  assert.match(html, /class="weather-cond">Partly Cloudy</);
+  assert.match(html, /Mountain View/);
+  assert.match(html, /H75 · L54/);
 });
