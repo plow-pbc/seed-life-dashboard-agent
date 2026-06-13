@@ -19,6 +19,9 @@
 
 const fs = require("node:fs/promises");
 const { composeSports } = require("./compose.js");
+const { makeLogger, readTrimmed, postKiosk } = require("../../ld-shared/scheduled/kiosk.js");
+
+const log = makeLogger("ld-sports");
 
 const LD_CONFIG_PATH = "/config/runtime/ld/config.json";
 const DASH_URL_PATH = "/config/secrets/dashboard-endpoint-url";
@@ -51,18 +54,6 @@ const DEFAULT_FOLLOWED = [
   { abbr: "GS", league: "nba" },
 ];
 
-function log(message, fields) {
-  try {
-    console.error(`[ld-sports] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-sports] ${message}`);
-  }
-}
-
-async function readTrimmed(readFile, path) {
-  return (await readFile(path, "utf8")).trim();
-}
-
 async function fetchScoreboard(fetchImpl, sportPath) {
   const url = `${ESPN_BASE}apis/site/v2/sports/${sportPath}/scoreboard`;
   const resp = await fetchImpl(url, {
@@ -71,21 +62,6 @@ async function fetchScoreboard(fetchImpl, sportPath) {
   });
   if (!resp.ok) throw new Error(`ESPN ${sportPath} ${resp.status}`);
   return resp.json();
-}
-
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  // The Pi backend rides the household LAN/tailnet — http:// is an accepted
-  // trade-off for that trust zone (matches ld-weather).
-  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be http(s)://");
-  }
-  const resp = await fetchImpl(dashUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
-    redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ card: SPORTS_CARD, type: "sports", text }),
-  });
-  if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
 
 // Testable seam: pass now/fetch/readFile/config and dashUrl/dashToken.
@@ -127,7 +103,7 @@ async function run(opts = {}) {
 
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, SPORTS_CARD, "sports", text);
   log("sports_posted", { games: spec.rows.length });
   return { posted: true, text };
 }

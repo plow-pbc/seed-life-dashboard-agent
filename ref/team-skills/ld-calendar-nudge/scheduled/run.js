@@ -31,6 +31,9 @@ const fs = require("node:fs/promises");
 
 const { qualifyingEvents } = require("./filter.js");
 const { composeReminder } = require("./compose.js");
+const { makeLogger, readTrimmed, minuteInTz, postKiosk } = require("../../ld-shared/scheduled/kiosk.js");
+
+const log = makeLogger("ld-calendar-nudge");
 
 const LD_CONFIG_PATH = "/config/runtime/ld/config.json";
 const API_URL_PATH = "/config/gateway/plow-api-url";
@@ -38,36 +41,12 @@ const API_TOKEN_PATH = "/config/secrets/plow-api-token";
 const DASH_URL_PATH = "/config/secrets/dashboard-endpoint-url";
 const DASH_TOKEN_PATH = "/config/secrets/dashboard-token";
 
-function log(message, fields) {
-  try {
-    console.error(`[ld-calendar-nudge] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-calendar-nudge] ${message}`);
-  }
-}
-
-// Wall-clock minute (0-59) in `tz`. Used by the self-gate; computed in the
-// family timezone so the :20/:50 cadence is correct even on a UTC gateway.
-function minuteInTz(now, tz) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour12: false,
-    minute: "2-digit",
-  }).formatToParts(now);
-  const m = parts.find((p) => p.type === "minute");
-  return m ? parseInt(m.value, 10) : now.getMinutes();
-}
-
 // True only in the [20,25) / [50,55) windows — one 5-min slot per half hour.
 // `minute % 30` folds :20 and :50 to the same 20-29 band; [20,25) is the
 // nudge slot. Exported for tests.
 function inNudgeWindow(minute) {
   const slot = minute % 30;
   return slot >= 20 && slot < 25;
-}
-
-async function readTrimmed(readFile, path) {
-  return (await readFile(path, "utf8")).trim();
 }
 
 async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax) {
@@ -100,22 +79,6 @@ async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax
   return items;
 }
 
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  // The Pi backend rides the household LAN/tailnet, not the public internet —
-  // http:// is an accepted trade-off for that trust zone.
-  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be http(s)://");
-  }
-  const resp = await fetchImpl(dashUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
-    redirect: "error", // never forward the bearer to a 3xx target
-    // Card 1 / type "alert" — calendar reminders share the alert slot with
-    // ld-morning-triage (the store is latest-per-card, so the newest wins).
-    body: JSON.stringify({ card: "1", type: "alert", text }),
-  });
-  if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
-}
 
 async function postImessage(fetchImpl, apiUrl, apiToken, text) {
   const resp = await fetchImpl(`${apiUrl}/channels/linq/send`, {
@@ -191,7 +154,9 @@ async function run(opts = {}) {
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
 
   // Kiosk first; on a failed kiosk post, surface and stop (don't iMessage).
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  // Card 1 / type "alert" — calendar reminders share the alert slot with
+  // ld-morning-triage (the store is latest-per-card, so the newest wins).
+  await postKiosk(fetchImpl, dashUrl, dashToken, "1", "alert", text);
   await postImessage(fetchImpl, apiUrl, apiToken, text);
   log("nudge_sent", { count: qualifying.length });
   return { sent: true, count: qualifying.length };

@@ -27,6 +27,9 @@
 
 const fs = require("node:fs/promises");
 const { composeWeather } = require("./compose.js");
+const { makeLogger, readTrimmed, minuteInTz, postKiosk } = require("../../ld-shared/scheduled/kiosk.js");
+
+const log = makeLogger("ld-weather");
 
 const LD_CONFIG_PATH = "/config/runtime/ld/config.json";
 const DASH_URL_PATH = "/config/secrets/dashboard-endpoint-url";
@@ -43,41 +46,10 @@ const NWS_USER_AGENT =
 // the runner only ever talks to api.weather.gov.
 const NWS_BASE = "https://api.weather.gov/";
 
-// NOTE (rule-of-3): minuteInTz / readTrimmed / postKiosk are mirrored from
-// ld-calendar-nudge/scheduled/run.js. Two Pattern-B bundles now share these
-// idioms; when a third lands, extract them into a shared scheduled helper
-// (and confirm /scheduled co-locates ld-shared so the import resolves).
-// Inlined for now — matches calendar-nudge, avoids a cross-bundle dep at
-// rule-of-2.
-
-function log(message, fields) {
-  try {
-    console.error(`[ld-weather] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-weather] ${message}`);
-  }
-}
-
-// Wall-clock minute (0-59) in `tz`. Computed in the family timezone so the
-// hourly gate is correct even on a UTC gateway.
-function minuteInTz(now, tz) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour12: false,
-    minute: "2-digit",
-  }).formatToParts(now);
-  const m = parts.find((p) => p.type === "minute");
-  return m ? parseInt(m.value, 10) : now.getMinutes();
-}
-
 // True only in the [0,5) window — one 5-min runner tick per hour. Exported
 // for tests.
 function inWeatherWindow(minute) {
   return minute < 5;
-}
-
-async function readTrimmed(readFile, path) {
-  return (await readFile(path, "utf8")).trim();
 }
 
 async function fetchJson(fetchImpl, url, label) {
@@ -107,21 +79,6 @@ async function resolveForecastUrls(fetchImpl, lat, lon) {
     throw new Error("NWS points: forecast URLs are off-host");
   }
   return { daily, hourly };
-}
-
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  // The Pi backend rides the household LAN/tailnet, not the public internet —
-  // http:// is an accepted trade-off for that trust zone.
-  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be http(s)://");
-  }
-  const resp = await fetchImpl(dashUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
-    redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ card: "3", type: "weather", text }),
-  });
-  if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
 
 // Testable seam: pass now/fetch/readFile/config and dashUrl/dashToken.
@@ -165,7 +122,7 @@ async function run(opts = {}) {
 
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text);
+  await postKiosk(fetchImpl, dashUrl, dashToken, "3", "weather", text);
   log("weather_posted"); // body-free — the card text carries household location
   return { posted: true, text };
 }
