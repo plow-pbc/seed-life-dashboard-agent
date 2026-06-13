@@ -23,11 +23,13 @@ installing the bundle is enough.
 `run.js` reads `weather.{location,lat,lon}` from `/config/runtime/ld/config.json`
 (NWS reports °F for US points — Fahrenheit-only by contract, no units knob),
 resolves the NWS gridpoint, fetches the
-hourly + daily forecast, composes one glanceable line (`compose.js`), and
-posts it to the kiosk as card 3, `type: weather`. The kiosk renders the line
-verbatim — no JSON, no parsing. Example:
+hourly + daily forecast, composes the weather tile HTML (`compose.js`), and
+posts it to the kiosk as card 3, `type: weather`. The kiosk renders the HTML
+verbatim (`dangerouslySetInnerHTML`) into the card — the styling lives in the
+viewer's shared `.weather-*` CSS, so the producer ships only the markup. The
+tile shows the current temp big, the condition, and the location + H/L beneath:
 
-    Mountain View · 72°F Sunny · H77 L55
+    <div class="weather"><div class="weather-now"><span class="weather-temp">72°</span><span class="weather-cond">Sunny</span></div><div class="weather-meta"><span>Mountain View</span><span>H77 · L55</span></div></div>
 
 It uses **no Plow tools** — a pure HTTPS fetch (`api.weather.gov`, no key)
 plus a kiosk POST (endpoint + bearer read from fixed `/config/secrets/`
