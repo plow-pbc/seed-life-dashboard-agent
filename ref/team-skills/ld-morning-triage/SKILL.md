@@ -92,14 +92,14 @@ Group by `thread_id` (the response uses snake_case — see
 `GmailMessageSummary` in `api/schemas/plow_schemas/api/gmail.py`).
 Keep a thread only if its latest message is not from the user. The
 2-day window slightly overshoots 36h; trim client-side. **Group
-returned messages by `account`; if any account contributes exactly 25
-messages, that account hit the per-account cap — skip the run**
-(`plow_gmail_search` applies `max_results` per connected account, so
-an aggregate count check misses single-account caps in multi-account
-installs).
-If `meta.degraded_accounts` is non-empty, log `account` + `error`
-and **skip the run** — partial-mailbox ranking is worse than no
-alert.
+returned messages by `account`, but never abort the run for a Gmail
+issue** — iMessage + calendar always rank, so degrade per account. An
+account returning exactly 25 messages hit the per-account `max_results`
+cap (it applies per connected account, so an aggregate count misses
+single-account caps); rank its page anyway — results are newest-first,
+so the most recent, most-likely-unaddressed mail is what you hold. An
+account in `meta.degraded_accounts` is untrustworthy: log `account` +
+`error` and drop just that one, keeping the healthy accounts.
 
 **Calendar** — read `calendar.sources` from `/config/runtime/ld/config.json`.
 For each entry, call `plow_calendar_search` with the entry's `account`
