@@ -27,9 +27,11 @@ renders the HTML verbatim (`dangerouslySetInnerHTML`) — the styling lives in t
 viewer's shared `.sp-*` CSS, so the producer ships only the markup. This makes
 an **HTML-capable `seed-life-dashboard-viewer`** (the generic box-renderer +
 `.sp-*` CSS, PR #40) a required runtime: against an older viewer that does not
-render card HTML, the card shows literal tags. A team with
-no game today simply contributes no row; a single team's feed hiccup is logged
-and skipped (one bad team never blanks the whole tile).
+render card HTML, the card shows literal tags. Only games within the next **14
+days** are shown — a team whose next game is further out (an off-season fixture
+months away) contributes no row, and when *no* followed team has a game in that
+window the tile reads **"No upcoming games"**. A single team's feed hiccup is
+logged and skipped (one bad team never blanks the whole tile).
 
 It uses **no Plow tools** — a pure HTTPS fetch (`site.api.espn.com`, no key)
 plus a kiosk POST (endpoint + bearer read from fixed `/config/secrets/` paths,

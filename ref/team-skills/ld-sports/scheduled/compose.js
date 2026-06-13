@@ -66,6 +66,11 @@ function gameHtml(game) {
 // The whole tile: a stacked list of game rows. Up to `max` rows fit the slot.
 // `is-live` warms the background when any shown game is live.
 function composeSports(games, max = 3) {
+  // No followed team has a game within the window → say so plainly (the producer
+  // still posts, so the card refreshes to this instead of stale scores).
+  if (games.length === 0) {
+    return `<div class="sp-list"><div class="sp-empty">No upcoming games</div></div>`;
+  }
   const shown = games.slice(0, Math.max(0, max));
   const live = shown.some((g) => g.state === "live");
   return `<div class="sp-list${live ? " is-live" : ""}">${shown.map(gameHtml).join("")}</div>`;

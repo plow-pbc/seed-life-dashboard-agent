@@ -70,6 +70,6 @@ test("composeSports stacks up to max rows and warms the background when any is l
   assert.equal((html.match(/class="sp-game"/g) || []).length, 2); // capped at max
 });
 
-test("composeSports renders an empty list when no games", () => {
-  assert.equal(composeSports([]), '<div class="sp-list"></div>');
+test("composeSports shows 'No upcoming games' when there are none", () => {
+  assert.equal(composeSports([]), '<div class="sp-list"><div class="sp-empty">No upcoming games</div></div>');
 });
