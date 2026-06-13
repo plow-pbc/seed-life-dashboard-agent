@@ -1,7 +1,7 @@
 # Test runner for seed-life-dashboard-agent.
 #
 # This SEED is unusual among the life-dashboard graph in that it owns
-# source code (the six ld-* bundles) which carries committed Python
+# source code (the seven ld-* bundles) which carries committed Python
 # and JS tests. The `test` recipe runs:
 #   - bash -n on the install + verify scripts
 #   - seed-convention structural verification
