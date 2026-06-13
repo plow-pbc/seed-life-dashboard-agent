@@ -119,13 +119,12 @@ async function run(opts = {}) {
     throw new Error("ld-sports: sports.followed missing or empty in /config/runtime/ld/config.json");
   }
 
-  // Fetch each followed team's scoreboard and keep whatever game each followed
-  // team has today — live, upcoming, or final (a team idle today simply
-  // contributes no row). A single feed hiccup is logged and skipped — one bad
-  // team shouldn't blank the whole tile.
-  // Fetch per followed team but dedupe by game key: two followed teams in the
-  // same matchup (SF + LAD) yield one row with BOTH sides starred (each parse
-  // flags only its own team, so OR the followed flag per side on merge).
+  // Fetch each followed team's scoreboard and keep whatever game it has today —
+  // live, upcoming, or final (a team idle today contributes no row), deduped by
+  // game key: two followed teams in the same matchup (SF + LAD) yield one row
+  // with BOTH sides starred (each parse flags only its own team, so OR the
+  // followed flag per side on merge). A single feed hiccup is logged and skipped
+  // — one bad team shouldn't blank the whole tile.
   const byKey = new Map();
   for (const f of followed) {
     try {
