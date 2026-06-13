@@ -76,12 +76,19 @@ async function run(opts = {}) {
   if (typeof timezone !== "string" || timezone.length === 0) {
     throw new Error("ld-sports: family.timezone missing in /config/runtime/ld/config.json");
   }
-  const followed = Array.isArray(config?.sports?.followed) && config.sports.followed.length
+  // Default ONLY when `sports.followed` is absent/non-array — an explicit empty
+  // array means "follow no teams" (keep the quiet placeholder), not "use demo".
+  const followed = Array.isArray(config?.sports?.followed)
     ? config.sports.followed
     : DEFAULT_FOLLOWED;
 
   // Fetch each DISTINCT league once (multiple followed teams can share a league).
-  const leagues = [...new Set(followed.map((f) => f.league))].filter((l) => ESPN_PATHS[l]);
+  // Fail loud on an unsupported league token rather than silently dropping it
+  // (a real config typo would otherwise render a partial card / placeholder).
+  const leagues = [...new Set(followed.map((f) => f.league))];
+  for (const l of leagues) {
+    if (!ESPN_PATHS[l]) throw new Error(`ld-sports: unsupported league "${l}" in sports.followed`);
+  }
   const scoreboards = {};
   await Promise.all(
     leagues.map(async (league) => {

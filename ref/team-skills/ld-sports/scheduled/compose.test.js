@@ -5,7 +5,7 @@ const assert = require("node:assert");
 const { composeSports, gameRow, gameState, color } = require("./compose.js");
 
 // Minimal ESPN-shaped fixtures. compose.js only reads the fields below.
-function competitor(homeAway, abbr, score, { color: c = "FD5A1E", logo = `https://espn/${abbr}.png` } = {}) {
+function competitor(homeAway, abbr, score, { color: c = "FD5A1E", logo = `https://a.espncdn.com/${abbr}.png` } = {}) {
   return { homeAway, score, team: { abbreviation: abbr, color: c, logo } };
 }
 function comp(state, away, home, { shortDetail, date } = {}) {
@@ -34,12 +34,23 @@ test("gameRow: final game — away left / home right, followed starred, loser gr
   const row = gameRow(c, "SF", "America/Los_Angeles");
   assert.equal(row.top, true);
   // cells: awayLogo, awayScore, center, homeScore, homeLogo
-  assert.deepEqual(row.cells[0], { kind: "logo", abbr: "SF", color: "#FD5A1E", logo: "https://espn/SF.png", star: true });
+  assert.deepEqual(row.cells[0], { kind: "logo", abbr: "SF", color: "#FD5A1E", logo: "https://a.espncdn.com/SF.png", star: true });
   assert.deepEqual(row.cells[1], { kind: "text", value: "8", variant: "score" }); // winner, not dimmed
   assert.equal(row.cells[2].cells[0].value, "Final");
   assert.deepEqual(row.cells[3], { kind: "text", value: "3", variant: "score", dim: true }); // loser greyed
   assert.equal(row.cells[4].abbr, "LAD");
   assert.equal(row.cells[4].star, undefined); // opponent not followed
+});
+
+test("gameRow: a non-ESPN-CDN or non-HTTPS logo URL → null (monogram fallback)", () => {
+  const c = comp(
+    "post",
+    competitor("away", "SF", "8", { logo: "http://192.168.1.1/x.png" }), // not HTTPS
+    competitor("home", "LAD", "3", { logo: "https://evil.com/x.png" }), // not ESPN-owned
+  );
+  const row = gameRow(c, "SF", "America/Los_Angeles");
+  assert.equal(row.cells[0].logo, null);
+  assert.equal(row.cells[4].logo, null);
 });
 
 test("gameRow: live game shows ESPN shortDetail in the center", () => {

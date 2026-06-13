@@ -25,6 +25,22 @@ function color(hex) {
   return typeof hex === "string" && /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex}` : null;
 }
 
+// Only forward an HTTPS ESPN-CDN logo URL into the tile-spec; anything else →
+// null (the viewer renders the colored monogram). Constrains an external feed
+// field so a malformed scoreboard can't drive an arbitrary kiosk <img> fetch.
+function logoUrl(v) {
+  if (typeof v !== "string") return null;
+  let u;
+  try {
+    u = new URL(v);
+  } catch {
+    return null;
+  }
+  return u.protocol === "https:" && (u.hostname === "espncdn.com" || u.hostname.endsWith(".espncdn.com"))
+    ? v
+    : null;
+}
+
 // Build the per-team display side from one ESPN competitor.
 function side(competitor) {
   const t = competitor?.team ?? {};
@@ -32,7 +48,7 @@ function side(competitor) {
   return {
     abbr: t.abbreviation ?? "?",
     color: color(t.color) ?? color(t.alternateColor),
-    logo: typeof t.logo === "string" ? t.logo : null,
+    logo: logoUrl(t.logo),
     score: Number.isFinite(score) ? score : null,
     homeAway: competitor?.homeAway,
   };
