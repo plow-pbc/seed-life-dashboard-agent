@@ -16,6 +16,7 @@ import post_to_kiosk  # noqa: E402
 post_to_kiosk.MESSAGE_FILE = "/tmp/ld-morning-updates-message"
 post_to_kiosk.CARD = "2"
 post_to_kiosk.BODY_TYPE = "affirmation"
+post_to_kiosk.TITLE = ""  # hide the eyebrow → the affirmation gets the full card height
 
 
 if __name__ == "__main__":

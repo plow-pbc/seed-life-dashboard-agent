@@ -19,7 +19,10 @@ function esc(s) {
 // One displayed side (away or home): real logo <img> or a colored monogram.
 // `pos` is "a" (away, left) or "h" (home, right); `lose` greys the loser.
 function sideHtml(side, pos, lose) {
-  const star = side.followed ? '<span class="sp-star">★</span>' : '<span class="sp-star"></span>';
+  // Every shown game already involves a followed team, so a "followed" star is
+  // redundant noise — emit an empty spacer span to keep the row's column grid
+  // aligned without drawing a ★.
+  const star = '<span class="sp-star"></span>';
   const logo = side.logo
     ? `<span class="sp-logo"><img src="${esc(side.logo)}" alt="${esc(side.abbr)}"></span>`
     : `<span class="sp-logo"><span class="sp-mono" style="--p:${esc(side.colors.primary)};--s:${esc(side.colors.secondary)}">${esc(side.abbr)}</span></span>`;

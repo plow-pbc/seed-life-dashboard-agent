@@ -150,6 +150,27 @@ def test_live_post_hits_endpoint_with_correct_payload():
     check("handoff file is consumed after a successful POST", handoff_consumed_after_success)
 
 
+def test_optional_title_is_posted_when_set():
+    """A producer can set post_to_kiosk.TITLE to control the eyebrow: '' hides it
+    (or a string overrides it). Absent (None) leaves `title` off the body — the
+    backward-compatible default the live-post test above already covers."""
+    post_to_kiosk.TITLE = ""
+    server, base = _start_capturing_server()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            write_fixtures(Path(d), text="x", endpoint=f"{base}/api/message", body_type="affirmation")
+            code, _ = run()
+    finally:
+        server.shutdown()
+        post_to_kiosk.TITLE = None  # reset module var so it cannot leak to other tests
+    check("title post exit zero", code == 0)
+    if _CapturingHandler.received:
+        check(
+            "body carries an empty title to hide the eyebrow",
+            _CapturingHandler.received[-1]["body"].get("title") == "",
+        )
+
+
 def test_dry_run_redacts_body_and_token():
     """--dry-run always redacts body.text and bearer from stdout. The operator
     can read MESSAGE_FILE directly if they need to verify exact text;

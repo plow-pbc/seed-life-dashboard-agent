@@ -84,7 +84,8 @@ test("in-window tick with a qualifying meeting posts kiosk + iMessage", async ()
   assert.equal(body.card, "1");
   assert.equal(body.type, "alert");
   assert.ok(typeof body.text === "string" && body.text.length > 0);
-  assert.deepEqual(Object.keys(body).sort(), ["card", "text", "type"]);
+  assert.equal(body.title, ""); // empty title hides the alert eyebrow
+  assert.deepEqual(Object.keys(body).sort(), ["card", "text", "title", "type"]);
 });
 
 // In-window but nothing qualifies → silent, no kiosk/iMessage.

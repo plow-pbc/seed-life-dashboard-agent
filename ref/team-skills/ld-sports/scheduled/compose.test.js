@@ -33,7 +33,10 @@ test("a live game renders both sides, the score, and the live indicator", () => 
   assert.match(html, /class="sp-sc h[^"]*">4/); // home score
   assert.match(html, /sp-livedot/);
   assert.match(html, /Bot 7th/);
-  assert.match(html, /class="sp-star">★/); // followed team starred
+  // No ★ — every shown game already involves a followed team, so the star is
+  // redundant; the spacer span stays for column alignment.
+  assert.doesNotMatch(html, /★/);
+  assert.match(html, /<span class="sp-star"><\/span>/);
 });
 
 test("the loser's score is greyed via the lose class", () => {

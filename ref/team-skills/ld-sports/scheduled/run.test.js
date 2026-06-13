@@ -99,9 +99,9 @@ test("in-window tick fetches followed teams, composes, and posts card 5 / type:s
   assert.ok(fetch.calls.some((c) => c.url.includes("/basketball/nba/scoreboard")));
 });
 
-test("two followed teams in the same game dedupe to one row, both starred", async () => {
+test("two followed teams in the same game dedupe to one row", async () => {
   // SF and LAD are both followed and play each other: each per-team fetch parses
-  // the same matchup, so the rendered tile must show ONE row with BOTH sides starred.
+  // the same matchup, so the rendered tile must show ONE row, not two.
   const event = {
     id: "401",
     date: "2026-06-12T02:10Z",
@@ -127,9 +127,9 @@ test("two followed teams in the same game dedupe to one row, both starred", asyn
     dashToken: "tok",
   });
   assert.equal(res.posted, true);
-  // One game row, two starred sides (★ for each followed team).
+  // One game row (the shared matchup is deduped, not rendered twice), and no ★.
   assert.equal((res.text.match(/sp-game/g) || []).length, 1);
-  assert.equal((res.text.match(/sp-star">★/g) || []).length, 2);
+  assert.doesNotMatch(res.text, /★/);
 });
 
 test("a single team's feed error is skipped, not fatal", async () => {

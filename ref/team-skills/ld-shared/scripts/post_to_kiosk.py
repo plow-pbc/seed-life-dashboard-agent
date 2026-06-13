@@ -26,8 +26,9 @@ The test suite imports this module directly and rebinds these constants — a
 seam reachable only by an importer, not by the CLI.
 
 Caller contract (the viewer requires all three of card/type/text; `card`
-picks the kiosk slot — latest post per card wins — and `type` is rendered
-verbatim as the card's eyebrow label):
+picks the kiosk slot — latest post per card wins. The card's eyebrow defaults
+to `type`; set the optional module var TITLE to "" to hide it or to a string to
+override it):
 
     import post_to_kiosk
     post_to_kiosk.MESSAGE_FILE = "/tmp/ld-<bundle>-text"
@@ -55,6 +56,10 @@ from pathlib import Path
 MESSAGE_FILE: str | None = None
 CARD: str | None = None
 BODY_TYPE: str | None = None
+# Optional producer-controlled eyebrow. Leave None to show the card's type as
+# its title (default); set "" to HIDE the title (reclaim vertical space); set a
+# string to override it.
+TITLE: str | None = None
 
 # Shared across all ld- bundles.
 ENDPOINT_FILE = "/config/secrets/dashboard-endpoint-url"
@@ -119,6 +124,8 @@ def main():
     token = read_required(TOKEN_FILE, "token file")
 
     body = {"card": CARD, "type": BODY_TYPE, "text": text}
+    if TITLE is not None:
+        body["title"] = TITLE
 
     if args.dry_run:
         # Always redact the body text — some bundles paraphrase private

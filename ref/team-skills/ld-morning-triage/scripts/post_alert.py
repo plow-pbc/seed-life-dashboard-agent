@@ -16,6 +16,7 @@ import post_to_kiosk  # noqa: E402
 post_to_kiosk.MESSAGE_FILE = "/tmp/ld-morning-triage-text"
 post_to_kiosk.CARD = "1"
 post_to_kiosk.BODY_TYPE = "alert"
+post_to_kiosk.TITLE = ""  # hide the eyebrow → the alert text gets the full card height
 
 
 if __name__ == "__main__":
