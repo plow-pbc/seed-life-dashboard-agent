@@ -359,6 +359,7 @@ def test_wrapper_contracts():
 def main():
     test_dry_run_redacts_body_and_token()
     test_live_post_hits_endpoint_with_correct_payload()
+    test_optional_title_is_posted_when_set()
     test_non_200_exits_non_zero_and_keeps_handoff_file()
     test_missing_or_empty_inputs_fail_fast()
     test_unset_wrapper_constants_fail_fast()
