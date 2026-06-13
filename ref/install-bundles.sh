@@ -199,7 +199,12 @@ if [ "$NEED_ASSEMBLE" = "1" ]; then
       morning_updates: { review_window_hours: 24 },
       morning_triage: { ranking_instructions: "", exclude: { imessage_handles: [], email_addresses: [] } },
       calendar_nudge: { lookahead_virtual_minutes: 30, lookahead_in_person_minutes: 60 },
-      weather: { location: "Mountain View", lat: 37.386, lon: -122.083 }
+      weather: { location: "Mountain View", lat: 37.386, lon: -122.083 },
+      sports: { followed: [
+        { abbr: "sf", sport: "baseball", league: "mlb" },
+        { abbr: "lad", sport: "baseball", league: "mlb" },
+        { abbr: "gsw", sport: "basketball", league: "nba" }
+      ] }
     }
   ' > "$TMP"
   chmod 600 "$TMP"
@@ -228,6 +233,22 @@ if [ "$NEED_ASSEMBLE" = "0" ] && [ "$(jq -r 'has("weather")' "$LD_CONFIG" 2>/dev
   echo "backfilled weather defaults into the preserved ld-config (ld-weather upgrade)." >&2
 fi
 
+# Same preserve-path backfill for ld-sports: a config predating ld-sports lacks
+# the `sports` section its auto-activating scheduled runner reads, which would
+# fail-loud every quarter-hour tick. Backfill the demo followed set ONLY when
+# the section is absent (never overwrite operator values).
+if [ "$NEED_ASSEMBLE" = "0" ] && [ "$(jq -r 'has("sports")' "$LD_CONFIG" 2>/dev/null)" = "false" ]; then
+  TMP=$(mktemp "$LD_CONFIG_DIR/.config.json.XXXXXX")
+  jq '. + { sports: { followed: [
+        { abbr: "sf", sport: "baseball", league: "mlb" },
+        { abbr: "lad", sport: "baseball", league: "mlb" },
+        { abbr: "gsw", sport: "basketball", league: "nba" }
+      ] } }' "$LD_CONFIG" > "$TMP"
+  chmod 600 "$TMP"
+  mv "$TMP" "$LD_CONFIG"
+  echo "backfilled sports defaults into the preserved ld-config (ld-sports upgrade)." >&2
+fi
+
 # The three operator inputs arrive EXPORTED in this script's environment (the
 # installer sets them to assemble the config). Clear them now — before the
 # bundle-POST python3 child below — so owner PII is not inherited into that
@@ -253,7 +274,7 @@ fi
 #    no-redirect opener prevents plowd from forwarding Authorization
 #    to another target on an upstream 30x — same pattern as
 #    ld-shared/scripts/post_to_kiosk.py:_NoRedirect.
-BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather)
+BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather ld-sports)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
     echo "missing bundle: $bundle" >&2
@@ -298,8 +319,9 @@ trap - EXIT
 
 echo "" >&2
 echo "Agent installed:" >&2
-echo "  6 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
-echo "             ld-morning-updates, ld-weekly-digest, ld-weather) posted" >&2
+echo "  7 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
+echo "             ld-morning-updates, ld-weekly-digest, ld-weather," >&2
+echo "             ld-sports) posted" >&2
 echo "             in one transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
 echo "  ld-config resolved at $LD_CONFIG" >&2
@@ -308,6 +330,6 @@ echo "NOTE: three of the bundles (ld-morning-updates, ld-morning-triage," >&2
 echo "ld-weekly-digest) need cron jobs registered via Plow's agent-side" >&2
 echo "'cron action=add' verb after install — message your Plow agent to" >&2
 echo "set up the morning-updates / morning-triage / weekly-digest crons" >&2
-echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge and" >&2
-echo "ld-weather use plowd's auto-activated scheduled/ entrypoint and need" >&2
-echo "no manual setup." >&2
+echo "per each bundle's SKILL.md § Scheduling. ld-calendar-nudge," >&2
+echo "ld-weather, and ld-sports use plowd's auto-activated scheduled/" >&2
+echo "entrypoint and need no manual setup." >&2
