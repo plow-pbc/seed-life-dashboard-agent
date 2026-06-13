@@ -52,17 +52,37 @@ function extractWeather(hourly, daily) {
   };
 }
 
-// Format the one glanceable line the kiosk renders verbatim, e.g.
-//   "Mountain View · 72°F Sunny · H77 L55"
-// A blank/absent location drops the leading "<location> · " segment.
+// Build the generic tile-spec the kiosk renders (the same vocabulary sports
+// uses; the viewer maps it with no per-type knowledge — see
+// seed-life-dashboard-viewer ref/app/src/tilespec.ts). Weather is two rows: a
+// hero figure + condition, then a muted meta line (location + hi/lo). A
+// blank/absent location drops that meta cell. Returns the spec OBJECT; run.js
+// JSON-stringifies it into the POST `text`.
 function formatWeather({ location, tempF, condition, highF, lowF }) {
-  const head = location ? `${location} · ` : "";
-  return `${head}${tempF}°F ${condition} · H${highF} L${lowF}`;
+  const meta = [];
+  if (location) meta.push({ kind: "text", value: location, variant: "meta" });
+  meta.push({ kind: "text", value: `H${highF} · L${lowF}`, variant: "meta" });
+  return {
+    rows: [
+      {
+        cells: [
+          {
+            kind: "stack",
+            cells: [
+              { kind: "text", value: `${tempF}°`, variant: "big" },
+              { kind: "text", value: condition, variant: "cond" },
+            ],
+          },
+        ],
+      },
+      { muted: true, cells: meta },
+    ],
+  };
 }
 
-// Convenience: NWS bodies + location → the display line.
+// Convenience: NWS bodies + location → the tile-spec JSON string for the POST.
 function composeWeather(location, hourly, daily) {
-  return formatWeather({ location, ...extractWeather(hourly, daily) });
+  return JSON.stringify(formatWeather({ location, ...extractWeather(hourly, daily) }));
 }
 
 module.exports = { composeWeather, extractWeather, formatWeather, shortCondition };

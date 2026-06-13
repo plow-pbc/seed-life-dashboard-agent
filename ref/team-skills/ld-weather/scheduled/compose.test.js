@@ -81,20 +81,31 @@ test("extractWeather fails loud on a malformed feed", () => {
   );
 });
 
-test("formatWeather renders the glanceable line with location", () => {
-  assert.equal(
-    formatWeather({ location: "Mountain View", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 }),
-    "Mountain View · 72°F Sunny · H77 L55",
-  );
+test("formatWeather builds the tile-spec: hero temp + condition, then a muted meta line", () => {
+  assert.deepEqual(formatWeather({ location: "Mountain View", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 }), {
+    rows: [
+      { cells: [{ kind: "stack", cells: [
+        { kind: "text", value: "72°", variant: "big" },
+        { kind: "text", value: "Sunny", variant: "cond" },
+      ] }] },
+      { muted: true, cells: [
+        { kind: "text", value: "Mountain View", variant: "meta" },
+        { kind: "text", value: "H77 · L55", variant: "meta" },
+      ] },
+    ],
+  });
 });
 
-test("formatWeather drops the location segment when absent", () => {
-  assert.equal(
-    formatWeather({ location: "", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 }),
-    "72°F Sunny · H77 L55",
-  );
+test("formatWeather drops the location meta cell when absent", () => {
+  const spec = formatWeather({ location: "", tempF: 72, condition: "Sunny", highF: 77, lowF: 55 });
+  assert.deepEqual(spec.rows[1].cells, [{ kind: "text", value: "H77 · L55", variant: "meta" }]);
 });
 
-test("composeWeather end-to-end: fixtures → display line", () => {
-  assert.equal(composeWeather("Mountain View", hourly(72), daily(75, 54, "Partly Cloudy")), "Mountain View · 72°F Partly Cloudy · H75 L54");
+test("composeWeather end-to-end: NWS fixtures → tile-spec JSON string", () => {
+  const json = composeWeather("Mountain View", hourly(72), daily(75, 54, "Partly Cloudy"));
+  assert.equal(typeof json, "string");
+  const spec = JSON.parse(json);
+  assert.equal(spec.rows[0].cells[0].cells[0].value, "72°");
+  assert.equal(spec.rows[0].cells[0].cells[1].value, "Partly Cloudy");
+  assert.equal(spec.rows[1].cells[1].value, "H75 · L54");
 });

@@ -78,15 +78,19 @@ test("in-window tick fetches, composes, and posts card 3 / type:weather", async 
     dashUrl: "https://kiosk.example/api/message",
     dashToken: "tok",
   });
-  assert.deepEqual(res, { posted: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.equal(res.posted, true);
   const post = fetch.calls.find((c) => c.opts.method === "POST");
   assert.ok(post, "a kiosk POST happened");
   assert.equal(post.opts.redirect, "error");
-  assert.deepEqual(JSON.parse(post.opts.body), {
-    card: "3",
-    type: "weather",
-    text: "Mountain View · 72°F Sunny · H75 L54",
-  });
+  const body = JSON.parse(post.opts.body);
+  assert.equal(body.card, "3");
+  assert.equal(body.type, "weather");
+  // text is the tile-spec JSON the kiosk renders generically
+  assert.equal(body.text, res.text);
+  const spec = JSON.parse(body.text);
+  assert.equal(spec.rows[0].cells[0].cells[0].value, "72°");
+  assert.equal(spec.rows[0].cells[0].cells[1].value, "Sunny");
+  assert.equal(spec.rows[1].cells[1].value, "H75 · L54");
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 
@@ -111,7 +115,8 @@ test("--dry-run composes but never POSTs", async () => {
     fetch,
     dryRun: true,
   });
-  assert.deepEqual(res, { dryRun: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.equal(res.dryRun, true);
+  assert.equal(JSON.parse(res.text).rows[0].cells[0].cells[0].value, "72°");
   assert.ok(!fetch.calls.some((c) => c.opts.method === "POST"), "no kiosk POST in dry-run");
 });
 
