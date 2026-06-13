@@ -128,7 +128,10 @@ function pickEvent(events, abbr) {
       (c) => c?.team?.abbreviation === abbr,
     );
     if (!involves) continue;
-    const cand = { ev, comp, state, start: comp.date ?? "" };
+    // A known start beats an unknown one: a missing date sorts LAST (￿), so
+    // a dated game wins the same-state tiebreak (matches the "soonest known
+    // start" intent). In practice ESPN always sends competition.date.
+    const cand = { ev, comp, state, start: comp.date ?? "￿" };
     const better =
       !best ||
       STATE_RANK[state] < STATE_RANK[best.state] ||
