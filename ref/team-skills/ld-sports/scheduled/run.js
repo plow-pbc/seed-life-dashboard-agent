@@ -121,23 +121,16 @@ async function run(opts = {}) {
 
   // Fetch each followed team's scoreboard and keep whatever game it has today —
   // live, upcoming, or final (a team idle today contributes no row), deduped by
-  // game key: two followed teams in the same matchup (SF + LAD) yield one row
-  // with BOTH sides starred (each parse flags only its own team, so OR the
-  // followed flag per side on merge). A single feed hiccup is logged and skipped
-  // — one bad team shouldn't blank the whole tile.
+  // game key so two followed teams in the same matchup (SF + LAD) yield one row,
+  // not two. A single feed hiccup is logged and skipped — one bad team shouldn't
+  // blank the whole tile.
   const byKey = new Map();
   for (const f of followed) {
     try {
       const sb = await fetchScoreboard(fetchImpl, f.sport, f.league);
       const g = parseGameFor(sb, f.abbr, timezone, now);
       if (!g) continue;
-      const prev = byKey.get(g.key);
-      if (prev) {
-        prev.away.followed = prev.away.followed || g.away.followed;
-        prev.home.followed = prev.home.followed || g.home.followed;
-      } else {
-        byKey.set(g.key, g);
-      }
+      if (!byKey.has(g.key)) byKey.set(g.key, g);
     } catch (err) {
       log("team_skipped", { abbr: f.abbr, error: String((err && err.message) || err) });
     }

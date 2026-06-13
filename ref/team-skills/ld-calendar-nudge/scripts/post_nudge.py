@@ -20,6 +20,7 @@ import post_to_kiosk  # noqa: E402
 post_to_kiosk.MESSAGE_FILE = "/tmp/ld-calendar-nudge-text"
 post_to_kiosk.CARD = "1"
 post_to_kiosk.BODY_TYPE = "alert"
+post_to_kiosk.TITLE = ""  # hide the eyebrow — matches the scheduled run.js alert post
 
 
 if __name__ == "__main__":

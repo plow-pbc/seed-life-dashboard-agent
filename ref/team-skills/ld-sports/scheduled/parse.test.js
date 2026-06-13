@@ -36,7 +36,6 @@ test("sideOf falls back to neutral colors and drops a non-https logo", () => {
   assert.equal(s.logo, null); // non-http(s) dropped
   assert.equal(s.score, null); // empty string → null, not 0
   assert.deepEqual(s.colors, { primary: "#6B7280", secondary: "#FFFFFF" });
-  assert.equal(s.followed, false);
 });
 
 test("sideOf accepts only HTTPS ESPN-CDN logos; untrusted feed URLs → null", () => {
@@ -52,14 +51,12 @@ test("sideOf accepts only HTTPS ESPN-CDN logos; untrusted feed URLs → null", (
   assert.equal(logoOf("not a url"), null);
 });
 
-test("parseGameFor orients away/home by ESPN homeAway and flags the followed side", () => {
+test("parseGameFor orients away/home by ESPN homeAway", () => {
   const sb = { events: [event({ mineHome: true })] };
   const g = parseGameFor(sb, "sf", "America/Los_Angeles");
   assert.equal(g.state, "live");
-  assert.equal(g.home.abbr, "SF");
-  assert.equal(g.home.followed, true);
+  assert.equal(g.home.abbr, "SF"); // followed team is home here
   assert.equal(g.away.abbr, "LAD");
-  assert.equal(g.away.followed, false);
   assert.equal(g.home.score, 4);
   assert.equal(g.away.score, 2);
 });

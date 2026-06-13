@@ -44,7 +44,6 @@ function sideOf(competitor) {
     logo: safeLogo(t.logo),
     colors: { primary: hexColor(t.color) || "#6B7280", secondary: hexColor(t.alternateColor) || "#FFFFFF" },
     score: Number.isFinite(score) ? score : null,
-    followed: false,
   };
 }
 
@@ -72,12 +71,11 @@ function parseGameFor(scoreboard, abbr, tz, now = new Date()) {
     const other = comp.competitors.find((c) => c !== mine);
     if (!other) continue;
     const state = STATE[comp.status?.type?.state] || "upcoming";
-    const followed = sideOf(mine);
-    followed.followed = true;
+    const mineSide = sideOf(mine);
     const opp = sideOf(other);
     const homeAway = (mine.homeAway || "").toLowerCase();
-    const away = homeAway === "home" ? opp : followed;
-    const home = homeAway === "home" ? followed : opp;
+    const away = homeAway === "home" ? opp : mineSide;
+    const home = homeAway === "home" ? mineSide : opp;
     const d = new Date(ev.date);
     const valid = !Number.isNaN(d.getTime());
     // Stable key so two followed teams in the same matchup (SF + LAD) dedupe to
