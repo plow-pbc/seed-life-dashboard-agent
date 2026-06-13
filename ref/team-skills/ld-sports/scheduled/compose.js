@@ -114,7 +114,9 @@ function competition(ev) {
 
 // Which of a team's events to show: prefer an in-progress game, then an upcoming
 // one, then a final (ESPN's same-day slate isn't ordered by state, and a
-// doubleheader can list a finished game ahead of a live one).
+// doubleheader can list a finished game ahead of a live one); ties broken by the
+// earliest start so a same-state doubleheader shows the soonest game, not
+// whatever ESPN listed first.
 const STATE_RANK = { live: 0, upcoming: 1, final: 2 };
 function pickEvent(events, abbr) {
   let best = null;
@@ -126,7 +128,12 @@ function pickEvent(events, abbr) {
       (c) => c?.team?.abbreviation === abbr,
     );
     if (!involves) continue;
-    if (!best || STATE_RANK[state] < STATE_RANK[best.state]) best = { ev, comp, state };
+    const cand = { ev, comp, state, start: comp.date ?? "" };
+    const better =
+      !best ||
+      STATE_RANK[state] < STATE_RANK[best.state] ||
+      (STATE_RANK[state] === STATE_RANK[best.state] && cand.start < best.start);
+    if (better) best = cand;
   }
   return best;
 }

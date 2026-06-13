@@ -92,6 +92,17 @@ test("composeSports: prefers a live game over a finished one (state, not order)"
   assert.equal(spec.rows[0].cells[2].cells[0].value, "Top 1st"); // the live game won
 });
 
+test("composeSports: a same-state doubleheader shows the EARLIEST game, not array order", () => {
+  // Two upcoming SF games listed late-then-early; the soonest must win.
+  const events = [
+    { id: "late", competitions: [comp("pre", competitor("away", "SF", "0"), competitor("home", "LAD", "0"), { date: "2026-06-12T23:00Z" })] },
+    { id: "early", competitions: [comp("pre", competitor("away", "SF", "0"), competitor("home", "NYM", "0"), { date: "2026-06-12T18:00Z" })] },
+  ];
+  const spec = composeSports([{ abbr: "SF", league: "mlb" }], { mlb: { events } }, "America/Los_Angeles");
+  assert.equal(spec.rows.length, 1);
+  assert.equal(spec.rows[0].cells[4].abbr, "NYM"); // the earlier (18:00Z vs NYM) game
+});
+
 test("composeSports: reads status/date nested on the EVENT, not the competition", () => {
   // ESPN sometimes carries status/date on the event; composeSports merges it down.
   const ev = {
