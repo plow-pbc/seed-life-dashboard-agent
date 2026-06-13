@@ -70,6 +70,14 @@ test("composeSports stacks up to max rows and warms the background when any is l
   assert.equal((html.match(/class="sp-game"/g) || []).length, 2); // capped at max
 });
 
-test("composeSports renders an empty list when no games", () => {
-  assert.equal(composeSports([]), '<div class="sp-list"></div>');
+test("composeSports shows 'No upcoming games' when there are none", () => {
+  const html = composeSports([]);
+  assert.match(html, /<div class="sp-empty">No upcoming games<\/div>/);
+  assert.equal((html.match(/class="sp-game"/g) || []).length, 0); // no game rows
+});
+
+test("composeSports ships its own <style> (self-contained; viewer carries no sp-* CSS)", () => {
+  const html = composeSports([game()]);
+  assert.match(html, /^<style>[\s\S]*\.sp-game\{/); // the widget's styling rides in the payload
+  assert.match(html, /class="sp-game"/); // and the markup follows
 });

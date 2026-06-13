@@ -5,8 +5,8 @@
 // games, and this module renders them. Together with parse.js it is the SINGLE
 // source of truth for the sports tile HTML the kiosk renders verbatim
 // (dangerouslySetInnerHTML) — SKILL.md does not restate the transform. The HTML
-// targets the viewer's shared .sp-* CSS (the Apple-Sports look); no viewer code
-// knows about sports.
+// is SELF-CONTAINED: it ships its own <style> (the Apple-Sports look), so the
+// viewer carries no .sp-* CSS and knows nothing about sports.
 
 // Minimal HTML escape for the few text fields we interpolate (team abbrs,
 // status strings, logo URLs). Not a security boundary — the writer is trusted,
@@ -63,12 +63,44 @@ function gameHtml(game) {
   );
 }
 
-// The whole tile: a stacked list of game rows. Up to `max` rows fit the slot.
-// `is-live` warms the background when any shown game is live.
+// The widget OWNS its styling: this <style> rides inside the posted HTML so the
+// viewer needs zero .sp-* CSS — it's a dumb HTML sink. The rules reference only
+// the viewer's shared theme tokens (--ink / --muted / --faint / --hair / fonts /
+// accents / --live-red), the one contract; the monogram reads --p/--s the
+// producer sets inline per side.
+const SP_STYLE = `<style>
+.sp-list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+.sp-list.is-live{background:linear-gradient(180deg,#fffdfa 0%,#fdf3ec 100%);border-radius:16px}
+.sp-empty{text-align:center;color:var(--muted);font-size:var(--t-card)}
+.sp-game{display:grid;grid-template-columns:14px 38px 30px 1fr 30px 38px 14px;align-items:center;column-gap:6px;padding:12px 0}
+.sp-game + .sp-game{border-top:1px solid var(--hair)}
+.sp-star{color:var(--accent-ink,var(--clay-ink));font-size:12px;text-align:center;line-height:1}
+.sp-logo{width:38px;height:38px;position:relative;display:flex;align-items:center;justify-content:center}
+.sp-logo img{width:100%;height:100%;object-fit:contain;display:block}
+.sp-mono{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--p,var(--muted));color:var(--s,#fff);font-family:var(--ff-mono);font-weight:500;font-size:12px;letter-spacing:0.02em}
+.sp-sc{font-family:var(--ff-body);font-weight:700;font-size:24px;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.sp-sc.a{text-align:right}
+.sp-sc.h{text-align:left}
+.sp-sc.lose{color:var(--faint);font-weight:500}
+.sp-ctr{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;min-width:0}
+.sp-time{font-family:var(--ff-body);font-weight:600;font-size:18px;color:var(--ink);white-space:nowrap}
+.sp-day{font-family:var(--ff-mono);font-weight:500;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--faint)}
+.sp-per{display:flex;align-items:center;gap:5px;font-family:var(--ff-mono);font-weight:500;font-size:13px;letter-spacing:0.03em;color:var(--accent-ink,var(--clay-ink));white-space:nowrap}
+.sp-livedot{width:7px;height:7px;border-radius:50%;background:var(--live-red);display:inline-block}
+.sp-fin{font-family:var(--ff-mono);font-weight:500;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
+</style>`;
+
+// The whole tile: the <style> + a stacked list of game rows (up to `max`).
+// `is-live` warms the background when any shown game is live; no games in the
+// window → "No upcoming games" (the producer still posts, so the card refreshes
+// to that instead of stale scores).
 function composeSports(games, max = 3) {
+  if (games.length === 0) {
+    return `${SP_STYLE}<div class="sp-list"><div class="sp-empty">No upcoming games</div></div>`;
+  }
   const shown = games.slice(0, Math.max(0, max));
   const live = shown.some((g) => g.state === "live");
-  return `<div class="sp-list${live ? " is-live" : ""}">${shown.map(gameHtml).join("")}</div>`;
+  return `${SP_STYLE}<div class="sp-list${live ? " is-live" : ""}">${shown.map(gameHtml).join("")}</div>`;
 }
 
 module.exports = { composeSports, gameHtml, esc };

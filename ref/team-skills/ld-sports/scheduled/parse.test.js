@@ -75,6 +75,17 @@ test("parseGameFor returns null when the followed team has no game", () => {
   assert.equal(parseGameFor({}, "sf", tz), null);
 });
 
+test("parseGameFor skips an upcoming game beyond the 14-day window", () => {
+  const tz = "America/Los_Angeles";
+  const now = new Date("2026-06-13T12:00:00Z");
+  // 7 days out → within the window, shown
+  assert.ok(parseGameFor({ events: [event({ state: "pre", date: "2026-06-20T19:00:00Z" })] }, "sf", tz, now));
+  // ~3 months out (an off-season fixture) → skipped, no row
+  assert.equal(parseGameFor({ events: [event({ state: "pre", date: "2026-09-07T20:00:00Z" })] }, "sf", tz, now), null);
+  // a live game today always passes (the window only gates upcoming games)
+  assert.ok(parseGameFor({ events: [event({ state: "in", date: "2026-06-13T19:00:00Z" })] }, "sf", tz, now));
+});
+
 test("parseGameFor renders tip-off time and day boundary in family.timezone, not the runner's", () => {
   // A 7:10 PM PT first pitch is 02:10Z the next calendar day. The label must
   // read in the household zone even when the runner's system clock is UTC.

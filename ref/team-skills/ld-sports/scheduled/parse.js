@@ -9,6 +9,12 @@
 // ESPN status.type.state → our render-ready game state.
 const STATE = { pre: "upcoming", in: "live", post: "final" };
 
+// Only surface upcoming games within this window — a followed team whose next
+// game is further out (an off-season fixture months away, e.g. an NFL team in
+// June) contributes no row, so the tile stays current instead of teasing a game
+// nobody's watching for. Live/final games are "today" and always pass.
+const UPCOMING_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 // Normalize a team color to "#RRGGBB" (uppercased) or null. ESPN omits the "#".
 function hexColor(v) {
   if (typeof v !== "string") return null;
@@ -78,6 +84,9 @@ function parseGameFor(scoreboard, abbr, tz, now = new Date()) {
     const home = homeAway === "home" ? mineSide : opp;
     const d = new Date(ev.date);
     const valid = !Number.isNaN(d.getTime());
+    // Skip an upcoming game beyond the 14-day window; keep scanning this team's
+    // scoreboard in case a nearer game exists.
+    if (state === "upcoming" && valid && d.getTime() - now.getTime() > UPCOMING_WINDOW_MS) continue;
     // Stable key so two followed teams in the same matchup (SF + LAD) dedupe to
     // one row. ESPN event id when present, else the orientation-stable matchup.
     const key = ev.id != null ? `id:${ev.id}` : `mu:${ev.date}|${away.abbr}@${home.abbr}`;

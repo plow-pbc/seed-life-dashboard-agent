@@ -128,7 +128,8 @@ test("two followed teams in the same game dedupe to one row", async () => {
   });
   assert.equal(res.posted, true);
   // One game row (the shared matchup is deduped, not rendered twice), and no ★.
-  assert.equal((res.text.match(/sp-game/g) || []).length, 1);
+  // Match the class attribute, not `sp-game` (which also appears in the <style>).
+  assert.equal((res.text.match(/class="sp-game"/g) || []).length, 1);
   assert.doesNotMatch(res.text, /★/);
 });
 
