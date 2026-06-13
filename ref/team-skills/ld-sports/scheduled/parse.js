@@ -31,11 +31,20 @@ function sideOf(competitor) {
   };
 }
 
+// Calendar day (YYYY-MM-DD) of `date` as it falls in `tz`. Used so the
+// "different day?" comparison and the rendered clock are both in the household
+// zone, not the runner's system zone (correct even on a UTC gateway).
+function dayKeyInTz(date, tz) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
 // Find the event whose competitor abbr matches `abbr`, build a render-ready
 // game (away/home oriented by ESPN's homeAway), or null if the followed team
-// has no game in this scoreboard. `now` only decides whether to show a weekday
-// label on an upcoming game (kickoff on a different calendar day).
-function parseGameFor(scoreboard, abbr, now = new Date()) {
+// has no game in this scoreboard. `tz` is the household timezone (family.timezone):
+// the tip-off clock and the weekday label both resolve in it so the kiosk shows
+// the right local time even when the runner's system zone differs. `now` only
+// decides whether to show a weekday label (kickoff on a different calendar day).
+function parseGameFor(scoreboard, abbr, tz, now = new Date()) {
   const want = String(abbr).toUpperCase();
   const events = Array.isArray(scoreboard?.events) ? scoreboard.events : [];
   for (const ev of events) {
@@ -59,10 +68,10 @@ function parseGameFor(scoreboard, abbr, now = new Date()) {
       away,
       home,
       status: comp.status?.type?.shortDetail || "",
-      timeLabel: valid ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(d) : "",
+      timeLabel: valid ? new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(d) : "",
       dayLabel:
-        valid && d.toDateString() !== now.toDateString()
-          ? new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(d)
+        valid && dayKeyInTz(d, tz) !== dayKeyInTz(now, tz)
+          ? new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d)
           : "",
     };
   }

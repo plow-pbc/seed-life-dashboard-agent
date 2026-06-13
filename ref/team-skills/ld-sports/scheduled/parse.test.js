@@ -41,7 +41,7 @@ test("sideOf falls back to neutral colors and drops a non-https logo", () => {
 
 test("parseGameFor orients away/home by ESPN homeAway and flags the followed side", () => {
   const sb = { events: [event({ mineHome: true })] };
-  const g = parseGameFor(sb, "sf");
+  const g = parseGameFor(sb, "sf", "America/Los_Angeles");
   assert.equal(g.state, "live");
   assert.equal(g.home.abbr, "SF");
   assert.equal(g.home.followed, true);
@@ -52,23 +52,38 @@ test("parseGameFor orients away/home by ESPN homeAway and flags the followed sid
 });
 
 test("parseGameFor maps ESPN state → upcoming/live/final", () => {
-  assert.equal(parseGameFor({ events: [event({ state: "pre" })] }, "sf").state, "upcoming");
-  assert.equal(parseGameFor({ events: [event({ state: "in" })] }, "sf").state, "live");
-  assert.equal(parseGameFor({ events: [event({ state: "post" })] }, "sf").state, "final");
+  const tz = "America/Los_Angeles";
+  assert.equal(parseGameFor({ events: [event({ state: "pre" })] }, "sf", tz).state, "upcoming");
+  assert.equal(parseGameFor({ events: [event({ state: "in" })] }, "sf", tz).state, "live");
+  assert.equal(parseGameFor({ events: [event({ state: "post" })] }, "sf", tz).state, "final");
 });
 
 test("parseGameFor returns null when the followed team has no game", () => {
-  assert.equal(parseGameFor({ events: [event()] }, "nyy"), null);
-  assert.equal(parseGameFor({ events: [] }, "sf"), null);
-  assert.equal(parseGameFor({}, "sf"), null);
+  const tz = "America/Los_Angeles";
+  assert.equal(parseGameFor({ events: [event()] }, "nyy", tz), null);
+  assert.equal(parseGameFor({ events: [] }, "sf", tz), null);
+  assert.equal(parseGameFor({}, "sf", tz), null);
+});
+
+test("parseGameFor renders tip-off time and day boundary in family.timezone, not the runner's", () => {
+  // A 7:10 PM PT first pitch is 02:10Z the next calendar day. The label must
+  // read in the household zone even when the runner's system clock is UTC.
+  const sb = { events: [event({ state: "pre", date: "2026-06-13T02:10Z" })] };
+  const now = new Date("2026-06-12T20:00Z"); // 1 PM PT on Jun 12
+  const pt = parseGameFor(sb, "sf", "America/Los_Angeles", now);
+  assert.equal(pt.timeLabel, "7:10 PM"); // 02:10Z → 7:10 PM PT (Jun 12)
+  assert.equal(pt.dayLabel, ""); // same PT calendar day as `now`, no weekday label
+  // Same instant, an Eastern household: 10:10 PM ET, still the same ET day.
+  const et = parseGameFor(sb, "sf", "America/New_York", now);
+  assert.equal(et.timeLabel, "10:10 PM");
 });
 
 test("parseGameFor adds a weekday label only when kickoff is a different day", () => {
-  // Mid-day event so the local-tz calendar date is unambiguous regardless of
-  // the test runner's timezone.
+  // Mid-day event so the tz calendar date is unambiguous.
+  const tz = "America/Los_Angeles";
   const sb = { events: [event({ state: "pre", date: "2026-06-13T19:00Z" })] };
-  const sameDay = parseGameFor(sb, "sf", new Date("2026-06-13T19:00Z"));
+  const sameDay = parseGameFor(sb, "sf", tz, new Date("2026-06-13T19:00Z"));
   assert.equal(sameDay.dayLabel, "");
-  const otherDay = parseGameFor(sb, "sf", new Date("2026-06-10T19:00Z"));
+  const otherDay = parseGameFor(sb, "sf", tz, new Date("2026-06-10T19:00Z"));
   assert.notEqual(otherDay.dayLabel, "");
 });

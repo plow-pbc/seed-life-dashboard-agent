@@ -119,14 +119,15 @@ async function run(opts = {}) {
     throw new Error("ld-sports: sports.followed missing or empty in /config/runtime/ld/config.json");
   }
 
-  // Fetch each followed team's scoreboard and keep the games that are live now
-  // (a team idle today simply contributes no row). A single feed hiccup is
-  // logged and skipped — one bad team shouldn't blank the whole tile.
+  // Fetch each followed team's scoreboard and keep whatever game each followed
+  // team has today — live, upcoming, or final (a team idle today simply
+  // contributes no row). A single feed hiccup is logged and skipped — one bad
+  // team shouldn't blank the whole tile.
   const games = [];
   for (const f of followed) {
     try {
       const sb = await fetchScoreboard(fetchImpl, f.sport, f.league);
-      const g = parseGameFor(sb, f.abbr, now);
+      const g = parseGameFor(sb, f.abbr, timezone, now);
       if (g) games.push(g);
     } catch (err) {
       log("team_skipped", { abbr: f.abbr, error: String((err && err.message) || err) });
