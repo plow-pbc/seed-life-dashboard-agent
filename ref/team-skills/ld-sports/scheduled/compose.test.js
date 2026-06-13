@@ -6,14 +6,14 @@ const { composeSports, gameHtml, esc } = require("./compose.js");
 
 // A render-ready game (the shape parse.js produces). Helpers below tweak one
 // field at a time so each test asks a different question.
-function side({ abbr = "SF", logo = "https://a/sf.png", score = 4, followed = false } = {}) {
-  return { abbr, name: abbr, logo, colors: { primary: "#FD5A1E", secondary: "#27251F" }, score, followed };
+function side({ abbr = "SF", logo = "https://a/sf.png", score = 4 } = {}) {
+  return { abbr, name: abbr, logo, colors: { primary: "#FD5A1E", secondary: "#27251F" }, score };
 }
 function game(overrides = {}) {
   return {
     state: "live",
     away: side({ abbr: "LAD", score: 2 }),
-    home: side({ abbr: "SF", score: 4, followed: true }),
+    home: side({ abbr: "SF", score: 4 }),
     status: "Bot 7th",
     timeLabel: "7:10 PM",
     dayLabel: "",
@@ -33,7 +33,10 @@ test("a live game renders both sides, the score, and the live indicator", () => 
   assert.match(html, /class="sp-sc h[^"]*">4/); // home score
   assert.match(html, /sp-livedot/);
   assert.match(html, /Bot 7th/);
-  assert.match(html, /class="sp-star">★/); // followed team starred
+  // No ★ — every shown game already involves a followed team, so the star is
+  // redundant; the spacer span stays for column alignment.
+  assert.doesNotMatch(html, /★/);
+  assert.match(html, /<span class="sp-star"><\/span>/);
 });
 
 test("the loser's score is greyed via the lose class", () => {
@@ -44,7 +47,7 @@ test("the loser's score is greyed via the lose class", () => {
 
 test("an upcoming game shows tip-off time (+ weekday) and no scores", () => {
   const html = gameHtml(
-    game({ state: "upcoming", away: side({ abbr: "LAD", score: null }), home: side({ abbr: "SF", score: null, followed: true }), dayLabel: "Sat" }),
+    game({ state: "upcoming", away: side({ abbr: "LAD", score: null }), home: side({ abbr: "SF", score: null }), dayLabel: "Sat" }),
   );
   assert.match(html, /class="sp-time">7:10 PM/);
   assert.match(html, /class="sp-day">Sat/);
@@ -56,7 +59,7 @@ test("a final game shows Final", () => {
 });
 
 test("a side without a logo falls back to a colored monogram", () => {
-  const html = gameHtml(game({ home: side({ abbr: "SF", logo: null, followed: true }) }));
+  const html = gameHtml(game({ home: side({ abbr: "SF", logo: null }) }));
   assert.match(html, /class="sp-mono" style="--p:#FD5A1E;--s:#27251F">SF/);
 });
 

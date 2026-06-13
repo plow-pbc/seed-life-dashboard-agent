@@ -16,7 +16,7 @@ API / per-machine state:
 Software:
 
 - `https://github.com/plow-pbc/seed-plow-app` — installs Plow.app and activates it. Provides its [activation verify check](https://github.com/plow-pbc/seed-plow-app/blob/main/SEED.md#verify) (the `plow-api-token` post-condition); also lands the `plow-local-token` this SEED uses to authenticate to plowd's marketplace endpoint.
-- `https://github.com/plow-pbc/seed-life-dashboard-viewer` — an HTML-capable kiosk viewer is a REQUIRED runtime. `ld-weather` (card 3) and `ld-sports` (card 5) post HTML tiles that the viewer renders verbatim, styled by its shared `.weather-*` / `.sp-*` CSS (the generic HTML box-renderer, PR #40). Installed against an older viewer that does not render card HTML, those two cards display literal markup tags — install/upgrade the viewer before this SEED.
+- `https://github.com/plow-pbc/seed-life-dashboard-viewer` — an HTML-capable kiosk viewer is a REQUIRED runtime. `ld-weather` (card 3) and `ld-sports` (card 5) post HTML tiles that the viewer renders verbatim, styled by its shared `.weather-*` / `.sp-*` CSS (the generic HTML box-renderer, PR #40; the optional producer `title` field the alert/affirmation bundles use to hide their eyebrows is viewer PR #43). Installed against an older viewer that does not render card HTML, those two cards display literal markup tags — install/upgrade the viewer before this SEED.
 - System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`. No install needed.
 
 ### Requirements
