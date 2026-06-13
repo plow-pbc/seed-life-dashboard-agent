@@ -35,5 +35,12 @@
     "location": "Mountain View",
     "lat": 37.386,
     "lon": -122.083
+  },
+  "sports": {
+    "followed": [
+      { "abbr": "SF", "league": "mlb" },
+      { "abbr": "LAD", "league": "mlb" },
+      { "abbr": "GS", "league": "nba" }
+    ]
   }
 }

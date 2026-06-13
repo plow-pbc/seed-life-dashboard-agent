@@ -25,3 +25,4 @@ test:
     python3 ref/team-skills/ld-shared/scripts/test_post_to_kiosk.py
     cd ref/team-skills/ld-calendar-nudge/scheduled && node --test *.test.js
     cd ref/team-skills/ld-weather/scheduled && node --test *.test.js
+    cd ref/team-skills/ld-sports/scheduled && node --test *.test.js
