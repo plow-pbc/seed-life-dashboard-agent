@@ -23,15 +23,20 @@ installing the bundle is enough.
 `run.js` reads `weather.{location,lat,lon}` from `/config/runtime/ld/config.json`
 (NWS reports °F for US points — Fahrenheit-only by contract, no units knob),
 resolves the NWS gridpoint, fetches the
-hourly + daily forecast, composes one glanceable line (`compose.js`), and
-posts it to the kiosk as `type: weather`. The kiosk renders the line
-verbatim — no JSON, no parsing. Example:
+hourly + daily forecast, composes the weather tile HTML (`compose.js`), and
+posts it to the kiosk as card 3, `type: weather`. The kiosk renders the HTML
+verbatim (`dangerouslySetInnerHTML`) into the card — the tile is
+**self-contained**: it ships its own `<style>` (the `.weather-*` rules), so the
+viewer holds no weather CSS. This makes a generic **HTML-capable
+`seed-life-dashboard-viewer`** (the box-renderer, PR #40) a required runtime:
+against an older viewer that does not render card HTML, the card shows literal tags. The
+tile shows the current temp big, the condition, and the location + H/L beneath:
 
-    Mountain View · 72°F Sunny · H77 L55
+    <div class="weather"><div class="weather-now"><span class="weather-temp">72°</span><span class="weather-cond">Sunny</span></div><div class="weather-meta"><span>Mountain View</span><span>H77 · L55</span></div></div>
 
 It uses **no Plow tools** — a pure HTTPS fetch (`api.weather.gov`, no key)
 plus a kiosk POST (endpoint + bearer read from fixed `/config/secrets/`
-paths, https-only, no redirects). NWS `shortForecast` is treated as data,
+paths, http(s)-allowed, no redirects). NWS `shortForecast` is treated as data,
 never instructions.
 
 ## Run or test it now

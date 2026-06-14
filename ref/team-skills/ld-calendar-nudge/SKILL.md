@@ -274,7 +274,7 @@ message) and is suppressed by `plow-imessage` (see
 `shouldSuppressDeliveredText` in
 `app/agent-runtime/channels/plow-imessage/src/channel.ts`), so it delivers
 nothing. The kiosk keeps whatever the last bundle posted until a newer
-post of the same type replaces it (there is no expiry).
+post to the same card replaces it (there is no expiry).
 
 **Drift prose to avoid.** The channel suppresses only the *exact*
 token `[NOOP]` (after trim) on this outbound path — any other closure
@@ -313,15 +313,16 @@ Where:
   same bearer risk — such an event is classified virtual (see Filter)
   and rendered `online`, never echoing the raw URL.
 
-Keep each reminder ≤ 200 characters and omit description / attendee
+Keep each reminder ≤ 115 characters and omit description / attendee
 list (privacy + signal-to-noise). `scheduled/compose.js`
 enforces the cap deterministically: when a composed line
-exceeds 200 chars it truncates the **variable** fields with an ellipsis
+exceeds 115 chars it truncates the **variable** fields with an ellipsis
 — location first, then the title — while always preserving the fixed
 `at <local_time> (<minutes_until>m)` portion (the actionable part).
 Never slice the whole composed line, which could drop the time. For the
 rare two-meetings-in-one-tick case, join them with a blank line in the
-same reminder text.
+same reminder text — the budget is per-event, so that rare card may
+still clip on the kiosk (the viewer's line clamp is the backstop).
 
 Then:
 
@@ -333,7 +334,9 @@ Then:
 
    The helper reads endpoint + token from the same `/config/secrets/`
    paths the other ld- bundles use, posts the reminder to the kiosk
-   with `type: "nudge"`, and consumes the handoff file on success.
+   as card 1 with `type: "alert"` (the slot shared with
+   `ld-morning-triage` — the store keeps the latest post per card),
+   and consumes the handoff file on success.
    Fails loudly on any non-200 response — surface that and stop; do
    not continue to the iMessage step on a failed kiosk post.
 

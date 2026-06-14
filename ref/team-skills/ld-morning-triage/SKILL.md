@@ -7,7 +7,7 @@ description: Post the life-dashboard kiosk's morning *alert* — the one most-im
 
 Surface the *one* unaddressed inbound message from the last 36 hours
 that the user should pay attention to today, and post it to the
-life-dashboard kiosk as `type: alert`. Runs every morning at 07:05
+life-dashboard kiosk as card 1, `type: alert`. Runs every morning at 07:05
 in `family.timezone`, five minutes after the affirmation
 (`ld-morning-updates`), so the two cron ticks remain visually distinct
 in `cron list`.
@@ -45,11 +45,11 @@ Once per morning:
 2. Gather read-only context from the three sources.
 3. Pre-filter to unaddressed candidates.
 4. Rank with the LLM, drawing on today's calendar + `ranking_instructions`.
-5. Compose a ≤240-char paraphrased alert.
+5. Compose a ≤115-char paraphrased alert.
 6. Post it via `scripts/post_alert.py`.
 
 This skill only posts the scheduled morning alert. It does not manage
-the dashboard, the Raspberry Pi, or the Vercel backend. It never
+the dashboard or the Raspberry Pi. It never
 replies to messages, marks-as-read, or archives — read-only on every
 upstream source.
 
@@ -92,14 +92,14 @@ Group by `thread_id` (the response uses snake_case — see
 `GmailMessageSummary` in `api/schemas/plow_schemas/api/gmail.py`).
 Keep a thread only if its latest message is not from the user. The
 2-day window slightly overshoots 36h; trim client-side. **Group
-returned messages by `account`; if any account contributes exactly 25
-messages, that account hit the per-account cap — skip the run**
-(`plow_gmail_search` applies `max_results` per connected account, so
-an aggregate count check misses single-account caps in multi-account
-installs).
-If `meta.degraded_accounts` is non-empty, log `account` + `error`
-and **skip the run** — partial-mailbox ranking is worse than no
-alert.
+returned messages by `account`, but never abort the run for a Gmail
+issue** — iMessage + calendar always rank, so degrade per account. An
+account returning exactly 25 messages hit the per-account `max_results`
+cap (it applies per connected account, so an aggregate count misses
+single-account caps); rank its page anyway — results are newest-first,
+so the most recent, most-likely-unaddressed mail is what you hold. An
+account in `meta.degraded_accounts` is untrustworthy: log `account` +
+`error` and drop just that one, keeping the healthy accounts.
 
 **Calendar** — read `calendar.sources` from `/config/runtime/ld/config.json`.
 For each entry, call `plow_calendar_search` with the entry's `account`
@@ -166,11 +166,14 @@ Ask for JSON output:
       "source": "imessage|gmail",
       "who": "<sender display name>",
       "why_now": "<one sentence explaining contextual urgency>",
-      "alert_text": "<≤240 chars, neutral voice, paraphrased — never quote message bodies verbatim>"
+      "alert_text": "<≤115 chars, neutral voice, paraphrased — never quote message bodies verbatim>"
     }
 
-If the LLM returns malformed JSON or empty `alert_text`, retry once.
-If still bad, post nothing — never make up content.
+If the LLM returns malformed JSON, empty `alert_text`, or `alert_text`
+over 115 chars, retry once. If still malformed or empty, post nothing —
+never make up content. If still merely over-length, post it anyway: a
+clamped alert on the kiosk beats a dropped one (the viewer's line clamp
+is the backstop).
 
 ## Post
 

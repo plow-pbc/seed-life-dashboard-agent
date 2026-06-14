@@ -101,14 +101,20 @@ async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax
 }
 
 async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  if (!dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be https://");
+  // The Pi backend rides the household LAN/tailnet, not the public internet —
+  // http:// is an accepted trade-off for that trust zone.
+  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
+    throw new Error("kiosk POST: dashboard URL must be http(s)://");
   }
   const resp = await fetchImpl(dashUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
     redirect: "error", // never forward the bearer to a 3xx target
-    body: JSON.stringify({ type: "nudge", text }),
+    // Card 1 / type "alert" — calendar reminders share the alert slot with
+    // ld-morning-triage (the store is latest-per-card, so the newest wins).
+    // title:"" hides the card's eyebrow so the alert text gets the full height
+    // (matches ld-morning-triage, which also posts the alert title-less).
+    body: JSON.stringify({ card: "1", type: "alert", text, title: "" }),
   });
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }

@@ -18,6 +18,29 @@ for s in dashboard-endpoint-url dashboard-token; do
 done
 echo "OK   v-secrets"
 
+# v-endpoint-shape / v-token-shape: the secret files are whitespace-FREE by
+# contract (SEED.md; the installer rejects the same bytes before mutation, and
+# writes verbatim with no trailing newline). Verify certifies that written
+# contract — no edge-trim leniency — and never prints either value. The check
+# is BYTE-level (grep is line-oriented and cannot see \n, the most likely
+# corruption): whitespace-free ⇔ raw size equals the [:space:]-stripped size.
+# v-secrets above already guarantees both files are non-empty.
+ws_free() { [ "$(wc -c < "$1")" -eq "$(tr -d '[:space:]' < "$1" | wc -c)" ]; }
+_ep_file="$SECRETS_DIR/dashboard-endpoint-url"
+if ! ws_free "$_ep_file" \
+  || ! grep -qE '^https?://[^[:space:]]+/api/message$' "$_ep_file"; then
+  echo "FAIL v-endpoint-shape: dashboard-endpoint-url must be a whitespace-free http(s)://…/api/message URL" >&2
+  exit 1
+fi
+unset _ep_file
+echo "OK   v-endpoint-shape"
+
+if ! ws_free "$SECRETS_DIR/dashboard-token"; then
+  echo "FAIL v-token-shape: dashboard-token must be whitespace-free (RFC 6750 bearer)" >&2
+  exit 1
+fi
+echo "OK   v-token-shape"
+
 # v1b: ld-config present + parses as JSON + passes the minimal
 # structural gate. This is the SAME gate install-bundles.sh enforces
 # pre-mutation (SEED.md ## Actions > minimal structural gate), so
@@ -54,7 +77,7 @@ fi
 echo "OK   v-ld-config"
 
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
-# SKILL.md); the other five are full skills with SKILL.md.
+# SKILL.md); the other six are full skills with SKILL.md.
 declare -a probes=(
   "ld-shared/scripts/post_to_kiosk.py"
   "ld-calendar-nudge/SKILL.md"
@@ -62,6 +85,7 @@ declare -a probes=(
   "ld-morning-updates/SKILL.md"
   "ld-weekly-digest/SKILL.md"
   "ld-weather/SKILL.md"
+  "ld-sports/SKILL.md"
 )
 
 # Bundle install location varies by plowd build:
@@ -104,27 +128,27 @@ echo "hello from verify" > "$DRY_INPUT"
 # output goes to a private mktemp file (not a fixed world-readable
 # /tmp path) to avoid symlink/TOCTOU + concurrent-run collisions.
 DRY_RC=0
-PYTHONPATH="$SEED_ROOT/ref/team-skills/ld-shared/scripts" \
+WRAPPER="$SEED_ROOT/ref/team-skills/ld-morning-updates/scripts/post_message.py" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
 DRY_INPUT="$DRY_INPUT" \
 python3 - >"$DRY_OUT" 2>&1 <<'PY' || DRY_RC=$?
 import os, sys, importlib.util
-spec = importlib.util.spec_from_file_location(
-    "post_to_kiosk",
-    os.path.join(os.environ["PYTHONPATH"], "post_to_kiosk.py"),
-)
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-# Rebind the module-level constants to point at our host-side secrets
-# (the wrapper normally hardcodes the VM paths /config/secrets/...).
-mod.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
-mod.TOKEN_FILE = os.environ["TOKEN_FILE"]
-mod.MESSAGE_FILE = os.environ["DRY_INPUT"]
-mod.BODY_TYPE = "message"
-sys.argv = ["post_to_kiosk.py", "--dry-run"]
+# Load a REAL wrapper so its CARD/BODY_TYPE assignments are load-bearing:
+# a wrapper missing the CARD contract must fail this check, not be masked
+# by verify assigning the constants itself.
+spec = importlib.util.spec_from_file_location("post_message", os.environ["WRAPPER"])
+wrapper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(wrapper)
+ptk = wrapper.post_to_kiosk
+# Rebind ONLY the host-side file paths (the wrapper hardcodes the VM
+# paths /config/secrets/... and its /tmp message file).
+ptk.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
+ptk.TOKEN_FILE = os.environ["TOKEN_FILE"]
+ptk.MESSAGE_FILE = os.environ["DRY_INPUT"]
+sys.argv = ["post_message.py", "--dry-run"]
 try:
-    mod.main()
+    ptk.main()
 except SystemExit as e:
     # main() may exit normally; a clean exit is fine for --dry-run
     if e.code not in (None, 0):

@@ -3,8 +3,18 @@
 // Pure weather composer for ld-weather (Pattern B — runs under the generic
 // plow-scheduled-runner via run.js). No HTTP, no FS, no clock: run.js fetches
 // the NWS forecast bodies and passes them here. This module is the SINGLE
-// source of truth for the displayed line — SKILL.md does not restate the
-// transform.
+// source of truth for the weather tile HTML the kiosk renders verbatim
+// (dangerouslySetInnerHTML) — SKILL.md does not restate the transform. The HTML
+// is SELF-CONTAINED: it ships its own <style>, so the viewer carries no
+// .weather-* CSS.
+
+// Minimal HTML escape for the few text fields we interpolate (location,
+// condition). Not a security boundary — the writer is trusted, bearer-gated,
+// loopback-read — just keeps a stray "&"/"<" in a feed from breaking the
+// fragment.
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
 
 // NWS `shortForecast` can be a compound phrase like "Patchy Fog then Sunny".
 // Keep the clause after the last " then " so the kiosk condition stays a
@@ -52,15 +62,32 @@ function extractWeather(hourly, daily) {
   };
 }
 
-// Format the one glanceable line the kiosk renders verbatim, e.g.
-//   "Mountain View · 72°F Sunny · H77 L55"
-// A blank/absent location drops the leading "<location> · " segment.
+// Build the weather tile the kiosk renders verbatim: a big current temp + the
+// condition, with the location and the day's H/L beneath. A blank/absent
+// location renders an empty meta slot (no stray separator).
+// The widget OWNS its styling: this <style> rides inside the posted HTML so the
+// viewer needs zero .weather-* CSS. Rules reference only the viewer's shared
+// theme tokens (--ink / --faint / fonts / cap-* type tokens).
+const WEATHER_STYLE = `<style>
+.weather{display:flex;flex-direction:column;gap:0.4rem;width:100%;min-height:0}
+.weather-now{display:flex;align-items:baseline;gap:0.75rem}
+.weather-temp{font-family:var(--ff-display);font-weight:400;font-size:2.4em;letter-spacing:-0.04em;line-height:0.82;color:var(--ink);font-variant-numeric:tabular-nums}
+.weather-cond{font-family:var(--ff-body);font-weight:300;font-size:0.85em;color:var(--ink)}
+.weather-meta{display:flex;justify-content:space-between;font-family:var(--ff-mono);font-weight:var(--cap-weight);font-size:var(--cap-size);letter-spacing:var(--cap-tracking);text-transform:uppercase;color:var(--faint)}
+</style>`;
+
 function formatWeather({ location, tempF, condition, highF, lowF }) {
-  const head = location ? `${location} · ` : "";
-  return `${head}${tempF}°F ${condition} · H${highF} L${lowF}`;
+  return (
+    WEATHER_STYLE +
+    `<div class="weather">` +
+    `<div class="weather-now"><span class="weather-temp">${esc(tempF)}°</span>` +
+    `<span class="weather-cond">${esc(condition)}</span></div>` +
+    `<div class="weather-meta"><span>${esc(location || "")}</span>` +
+    `<span>H${esc(highF)} · L${esc(lowF)}</span></div></div>`
+  );
 }
 
-// Convenience: NWS bodies + location → the display line.
+// Convenience: NWS bodies + location → the tile HTML.
 function composeWeather(location, hourly, daily) {
   return formatWeather({ location, ...extractWeather(hourly, daily) });
 }

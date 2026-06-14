@@ -29,7 +29,7 @@ Once per morning:
 4. Post it to the kiosk with `scripts/post_message.py`.
 
 This skill only posts the scheduled morning message. It does not manage the
-dashboard, the Raspberry Pi, or the Vercel backend.
+dashboard or the Raspberry Pi.
 
 ## Requirements
 
@@ -39,8 +39,9 @@ This skill requires Plow — it uses Plow's calendar and iMessage tools:
 - `plow_imessage_analytics` — one bulk SQL read of recent messages.
 - `plow_imessage_thread` — sparing follow-up read of a single thread.
 
-It also needs the message API from the `life-dashboard` project deployed to
-Vercel, and the bearer token at `/config/secrets/dashboard-token`.
+It also needs the household Pi's dashboard server (kiosk message API): the
+endpoint URL at `/config/secrets/dashboard-endpoint-url` and the bearer
+token at `/config/secrets/dashboard-token`.
 
 **To fork off-Plow**: rewrite the Gather context section below to retarget
 `plow_calendar_search` and `plow_imessage_analytics` / `plow_imessage_thread`
@@ -119,8 +120,12 @@ Privacy boundary below.
 
 ## Compose the affirmation
 
-Write **one or two short sentences** — warm, encouraging, for the whole
-family. Vary the tone and wording day to day; never sound templated.
+Write **one or two short sentences, ≤115 characters total** (the kiosk
+card ellipsizes anything longer mid-thought) — warm, encouraging, for the
+whole family. Vary the tone and wording day to day; never sound templated.
+If the draft runs over 115 chars, regenerate once; if it is still over,
+post it anyway — a clamped card beats a missing one (the viewer's line
+clamp is the backstop).
 
 **Anchor it in something specific from the gathered context.** Generic
 "big day team, plenty on the calendar" is a failure mode — the
@@ -180,9 +185,11 @@ from `/config/secrets/dashboard-endpoint-url`, and the token from
 Both files live in `/config/secrets/` (mode 0600), the credential seam
 `team-skills/README.md` curates the agent away from — a prompt-injected
 turn cannot rewrite the endpoint to exfiltrate the bearer-token POST.
-It fails loudly on any non-200 response.
+It posts the affirmation as card 2 with `type: "affirmation"` and an empty
+`title` (`post_to_kiosk.TITLE = ""`), so the card renders **no eyebrow** — the
+affirmation gets the full card height. Fails loudly on any non-200 response.
 
-The endpoint stores a single current message per type, so each post
+The endpoint stores a single current message per card, so each post
 replaces the previous one. There is no expiry: the message stays on the
 dashboard until the next day's post replaces it.
 

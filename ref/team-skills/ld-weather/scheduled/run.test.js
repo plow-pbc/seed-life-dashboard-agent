@@ -69,7 +69,7 @@ test("off-window tick gates out without fetching", async () => {
   assert.equal(fetch.calls.length, 0);
 });
 
-test("in-window tick fetches, composes, and posts type:weather", async () => {
+test("in-window tick fetches, composes, and posts card 3 / type:weather", async () => {
   const fetch = fakeFetch();
   const res = await run({
     now: new Date("2026-06-09T22:00:00Z"), // 3:00pm PT → minute 0
@@ -78,11 +78,16 @@ test("in-window tick fetches, composes, and posts type:weather", async () => {
     dashUrl: "https://kiosk.example/api/message",
     dashToken: "tok",
   });
-  assert.deepEqual(res, { posted: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.equal(res.posted, true);
+  assert.match(res.text, /class="weather-temp">72°/);
   const post = fetch.calls.find((c) => c.opts.method === "POST");
   assert.ok(post, "a kiosk POST happened");
   assert.equal(post.opts.redirect, "error");
-  assert.deepEqual(JSON.parse(post.opts.body), { type: "weather", text: "Mountain View · 72°F Sunny · H75 L54" });
+  const body = JSON.parse(post.opts.body);
+  assert.equal(body.card, "3");
+  assert.equal(body.type, "weather");
+  assert.match(body.text, /class="weather-cond">Sunny</);
+  assert.match(body.text, /H75 · L54/);
   assert.equal(post.opts.headers.Authorization, "Bearer tok");
 });
 
@@ -107,21 +112,37 @@ test("--dry-run composes but never POSTs", async () => {
     fetch,
     dryRun: true,
   });
-  assert.deepEqual(res, { dryRun: true, text: "Mountain View · 72°F Sunny · H75 L54" });
+  assert.equal(res.dryRun, true);
+  assert.match(res.text, /class="weather-temp">72°/);
   assert.ok(!fetch.calls.some((c) => c.opts.method === "POST"), "no kiosk POST in dry-run");
 });
 
-test("non-https kiosk URL is refused", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: baseConfig(),
-      fetch: fakeFetch(),
-      dashUrl: "http://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /must be https/,
-  );
+test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", async () => {
+  const fetch = fakeFetch();
+  const res = await run({
+    now: new Date("2026-06-09T22:00:00Z"),
+    config: baseConfig(),
+    fetch,
+    dashUrl: "http://rpi5screen:5174/api/message",
+    dashToken: "tok",
+  });
+  assert.equal(res.posted, true);
+});
+
+test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
+  for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
+    await assert.rejects(
+      run({
+        now: new Date("2026-06-09T22:00:00Z"),
+        config: baseConfig(),
+        fetch: fakeFetch(),
+        dashUrl: badUrl,
+        dashToken: "tok",
+      }),
+      /must be http\(s\):\/\//,
+      `expected rejection for ${badUrl}`,
+    );
+  }
 });
 
 test("a failed kiosk POST surfaces loudly", async () => {
