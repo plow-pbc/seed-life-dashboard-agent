@@ -41,8 +41,8 @@ never instructions.
 
 ## Run or test it now
 
-    node /workspace/skills/ld-weather/scheduled/run.js --dry-run   # compose + print, no POST
-    node /workspace/skills/ld-weather/scheduled/run.js --force     # compose + POST now (bypass the hourly gate)
+    node /workspace/host/skills/ld-weather/scheduled/run.js --dry-run   # compose + print, no POST
+    node /workspace/host/skills/ld-weather/scheduled/run.js --force     # compose + POST now (bypass the hourly gate)
 
 Both flags bypass the self-gate so you can test off-cadence; the unattended
 runner passes neither and stays gated to the top of the hour.

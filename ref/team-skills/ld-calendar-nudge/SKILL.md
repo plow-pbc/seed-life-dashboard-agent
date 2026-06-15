@@ -330,7 +330,7 @@ Then:
    with your file-writing tool, then run the helper by absolute path
    (the cron's working directory is not the bundle's directory):
 
-       /workspace/skills/ld-calendar-nudge/scripts/post_nudge.py
+       /workspace/host/skills/ld-calendar-nudge/scripts/post_nudge.py
 
    The helper reads endpoint + token from the same `/config/secrets/`
    paths the other ld- bundles use, posts the reminder to the kiosk

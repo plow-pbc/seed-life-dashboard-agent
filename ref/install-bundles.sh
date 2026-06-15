@@ -336,7 +336,7 @@ echo "" >&2
 # the install contract).
 API_TOKEN_FILE="$SECRETS_DIR/plow-api-token"   # same secrets dir as plow-local-token / the VM's /config/secrets
 CRON_JOBS="$APP_SUPPORT/agent-runtime/gateway/cron/jobs.json"
-CRON_MSG='Please set up the three life-dashboard recurring cron jobs now: ld-morning-updates, ld-morning-triage, and ld-weekly-digest. For each, read /workspace/skills/<name>/SKILL.md and follow its Scheduling section plus /workspace/AGENTS.md § Self-managed crons, then create the job with cron action=add (schedule, delivery announce/plow-imessage, contextMessages, payload as specified there; tz = family.timezone from /config/runtime/ld/config.json). ld-calendar-nudge and ld-weather are already scheduled and need no cron. Reply with cron action=list when done.'
+CRON_MSG='Please set up the three life-dashboard recurring cron jobs now: ld-morning-updates, ld-morning-triage, and ld-weekly-digest. For each, read /workspace/host/skills/<name>/SKILL.md and follow its Scheduling section plus /workspace/AGENTS.md § Self-managed crons, then create the job with cron action=add (schedule, delivery announce/plow-imessage, contextMessages, payload as specified there; tz = family.timezone from /config/runtime/ld/config.json). ld-calendar-nudge and ld-weather are already scheduled and need no cron. Reply with cron action=list when done.'
 cron_ok=""
 if [ -r "$API_TOKEN_FILE" ] && \
    MSG="$CRON_MSG" TOKEN_FILE="$API_TOKEN_FILE" python3 - <<'PY'
