@@ -138,7 +138,7 @@ The digest is delivered on two surfaces, in this order:
    with your file-writing tool, then run the helper by absolute path
    (the cron's working directory is not the bundle's directory):
 
-       /workspace/skills/ld-weekly-digest/scripts/post_digest.py
+       /workspace/host/skills/ld-weekly-digest/scripts/post_digest.py
 
    The helper reads endpoint + token from the same `/config/secrets/`
    paths the other ld- bundles use, posts the digest to the kiosk as
@@ -172,4 +172,4 @@ Create it with `cron action=add`:
 - schedule: `{"kind":"cron","expr":"0 7 * * 4","tz":<family.timezone from /config/runtime/ld/config.json>}`
   (Thursday 07:00 in the configured timezone; adjust the cron expression
   if a different day/time is preferred)
-- payload message: `Read and follow the skill bundle at /workspace/skills/ld-weekly-digest. Read /config/runtime/ld/config.json first. Build and deliver this week's calendar digest.`
+- payload message: `Read and follow the skill bundle at /workspace/host/skills/ld-weekly-digest. Read /config/runtime/ld/config.json first. Build and deliver this week's calendar digest.`

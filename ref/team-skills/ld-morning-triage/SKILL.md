@@ -181,11 +181,11 @@ Write `alert_text` to `/tmp/ld-morning-triage-text` using the
 file-writing tool. Then run the helper by absolute path (the cron's
 working directory is not the bundle's directory):
 
-    /workspace/skills/ld-morning-triage/scripts/post_alert.py
+    /workspace/host/skills/ld-morning-triage/scripts/post_alert.py
 
 Add `--dry-run` when testing without hitting the live kiosk:
 
-    /workspace/skills/ld-morning-triage/scripts/post_alert.py --dry-run
+    /workspace/host/skills/ld-morning-triage/scripts/post_alert.py --dry-run
 
 After posting, emit a one-line summary that **repeats the `alert_text`
 verbatim** — that text is already on the shared kiosk by the time the
@@ -216,4 +216,4 @@ Create it with `cron action=add`:
   visually distinct in `cron list`
 - `contextMessages=0` — prioritization should be consistent across
   runs, not varied for variety's sake
-- payload message: `Read and follow the skill bundle at /workspace/skills/ld-morning-triage. Read /config/runtime/ld/config.json first. Surface today's morning priority alert.`
+- payload message: `Read and follow the skill bundle at /workspace/host/skills/ld-morning-triage. Read /config/runtime/ld/config.json first. Surface today's morning priority alert.`

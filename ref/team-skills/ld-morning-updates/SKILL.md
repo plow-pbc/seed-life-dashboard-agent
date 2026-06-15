@@ -177,7 +177,7 @@ a prompt-injected turn has no argument to steer.
 Then run the helper by absolute path (the cron's working directory is not
 the skill directory):
 
-    /workspace/skills/ld-morning-updates/scripts/post_message.py
+    /workspace/host/skills/ld-morning-updates/scripts/post_message.py
 
 It reads the message from `/tmp/ld-morning-updates-message`, the endpoint
 from `/config/secrets/dashboard-endpoint-url`, and the token from
@@ -197,7 +197,7 @@ Preview the request envelope without sending it (body text is redacted
 to `<redacted, N chars>`; read `/tmp/ld-morning-updates-message`
 directly for the exact text):
 
-    /workspace/skills/ld-morning-updates/scripts/post_message.py --dry-run
+    /workspace/host/skills/ld-morning-updates/scripts/post_message.py --dry-run
 
 After posting, emit a one-line summary of what was posted.
 
@@ -214,4 +214,4 @@ Create it with `cron action=add`:
   `delivery.channel=plow-imessage`
 - schedule: `{"kind":"cron","expr":"0 7 * * *","tz":<family.timezone from /config/runtime/ld/config.json>}`
 - `contextMessages=3` — so the affirmation varies day to day
-- payload message: `Read and follow the skill bundle at /workspace/skills/ld-morning-updates. Read /config/runtime/ld/config.json first. Compose and post today's family affirmation — make it different from recent mornings.`
+- payload message: `Read and follow the skill bundle at /workspace/host/skills/ld-morning-updates. Read /config/runtime/ld/config.json first. Compose and post today's family affirmation — make it different from recent mornings.`

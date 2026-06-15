@@ -42,8 +42,8 @@ never instructions.
 
 ## Run or test it now
 
-    node /workspace/skills/ld-sports/scheduled/run.js --dry-run   # compose + print, no POST
-    node /workspace/skills/ld-sports/scheduled/run.js --force     # compose + POST now (bypass the gate)
+    node /workspace/host/skills/ld-sports/scheduled/run.js --dry-run   # compose + print, no POST
+    node /workspace/host/skills/ld-sports/scheduled/run.js --force     # compose + POST now (bypass the gate)
 
 Both flags bypass the self-gate so you can test off-cadence; the unattended
 runner passes neither and stays gated to the quarter hour.
