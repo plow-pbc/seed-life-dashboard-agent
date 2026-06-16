@@ -274,7 +274,7 @@ fi
 #    no-redirect opener prevents plowd from forwarding Authorization
 #    to another target on an upstream 30x — same pattern as
 #    ld-shared/scripts/post_to_kiosk.py:_NoRedirect.
-BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather ld-sports)
+BUNDLE_NAMES=(ld-shared ld-calendar-nudge ld-morning-triage ld-morning-updates ld-weekly-digest ld-weather ld-sports ld-photo)
 for bundle in "${BUNDLE_NAMES[@]}"; do
   [ -d "$BUNDLES_DIR/$bundle" ] || {
     echo "missing bundle: $bundle" >&2

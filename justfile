@@ -7,6 +7,7 @@
 #   - seed-convention structural verification
 #   - the ld-shared Python helper tests (post_to_kiosk shared module)
 #   - the ld-calendar-nudge + ld-weather + ld-sports JS scheduled tests
+#   - the ld-photo behavior test (host tools stubbed)
 #
 # The other life-dashboard SEEDs ship no executable code beyond
 # shell scripts, so they don't carry a justfile — this is the only
@@ -26,3 +27,4 @@ test:
     cd ref/team-skills/ld-calendar-nudge/scheduled && node --test *.test.js
     cd ref/team-skills/ld-weather/scheduled && node --test *.test.js
     cd ref/team-skills/ld-sports/scheduled && node --test *.test.js
+    bash ref/team-skills/ld-photo/scripts/test_manage_photo.sh
