@@ -1,6 +1,6 @@
 # Test runner for seed-life-dashboard-agent.
 #
-# This SEED owns six platform-specific ld-* producers (Python wrappers + JS
+# This SEED owns seven platform-specific ld-* producers (Python wrappers + JS
 # scheduled runners with committed tests). The shared ld-shared contract layer
 # (post_to_kiosk + the wire/tile protocol + the ld-config template) lives in
 # plow-pbc/life-dashboard-skills and is pulled here by ref/sync-ld-shared.sh,

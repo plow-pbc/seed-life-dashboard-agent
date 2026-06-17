@@ -54,10 +54,17 @@ def _read_file(path):
 
 
 def viewer_base():
-    base = os.environ.get("VIEWER_BASE_URL", "").strip() or _read_file(BASE_FILE)
+    # File-first, env fallback — same posture as token() and ld-shared's
+    # post_to_kiosk (the read-only /config/secrets mount is canonical).
+    base = _read_file(BASE_FILE) or os.environ.get("VIEWER_BASE_URL", "").strip()
     if not base:
-        _die("no VIEWER_BASE_URL (set the VIEWER_BASE_URL env var or /config/secrets/viewer-base-url "
+        _die("no VIEWER_BASE_URL (set /config/secrets/viewer-base-url or the VIEWER_BASE_URL env var "
              "to the viewer's full tailnet FQDN + the /fd serve prefix)")
+    # Validate before attaching the bearer — a non-http(s) or whitespace-bearing
+    # base must fail loud, not steer an authenticated request somewhere unexpected
+    # (same guard ld-shared's installer applies to DASHBOARD_ENDPOINT_URL).
+    if not base.startswith(("http://", "https://")) or any(c.isspace() for c in base):
+        _die(f"VIEWER_BASE_URL must be a whitespace-free http(s):// URL, got: {base}")
     return base.rstrip("/")
 
 

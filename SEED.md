@@ -56,6 +56,8 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
   - `dashboard-endpoint-url` — the full `/api/message` URL of the Pi message API.
   - `dashboard-token` — the bearer the Pi message API validates.
 - Both mode 600, owner-only. plowd bind-mounts `agent-runtime/` into the agent VM at `/config/`, so the bundles read these at `/config/secrets/dashboard-{endpoint-url,token}` — the paths `ld-shared/scripts/post_to_kiosk.py` already hardcodes.
+- One **optional** operator-supplied file in the same directory enables the request-triggered `ld-photo` skill:
+  - `viewer-base-url` — the viewer's base URL (whitespace-free `http(s)://`, the full tailnet FQDN + `/fd` serve prefix, e.g. `http://<viewer-host>.<tailnet>.ts.net/fd`). `ld-photo` reads it at `/config/secrets/viewer-base-url`; the scheduled producers don't use it. Absent → `ld-photo` fails loud with a clear error the first time a photo is texted, leaving the other bundles unaffected. (Not yet auto-provisioned by the installer — set it by hand or export `VIEWER_BASE_URL` for the skill.)
 
 ### Endpoint inputs
 

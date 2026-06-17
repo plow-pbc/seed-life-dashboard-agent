@@ -46,12 +46,14 @@ On success `add` prints the stored filename + how many texted photos are kept.
   (the read-only secrets mount), env `DASHBOARD_TOKEN` as fallback. Never
   printed.
 - **`VIEWER_BASE_URL`** — the viewer's base URL, **required** (no default — each
-  household's viewer is a different host). Read from env `VIEWER_BASE_URL`, then
-  `/config/secrets/viewer-base-url`; if neither is set, `add`/`clear` fail loudly.
-  It MUST be the **full tailnet FQDN + the `/fd` serve prefix**
+  household's viewer is a different host). Read **file-first** from
+  `/config/secrets/viewer-base-url`, env `VIEWER_BASE_URL` as fallback; if neither
+  is set, `add`/`clear` fail loudly. It MUST be a whitespace-free `http(s)://` URL
+  — the **full tailnet FQDN + the `/fd` serve prefix**
   (e.g. `http://<viewer-host>.<tailnet>.ts.net/fd`) — the bare host doesn't
   resolve inside the agent VM, and the raw tailnet IP is rejected by the viewer's
-  Host guard.
+  Host guard. The operator supplies it once (see the SEED's Requirements); it is
+  the only `ld-photo`-specific config and the scheduled producers don't use it.
 
 ## HEIC / iPhone photos
 
