@@ -84,10 +84,31 @@ open(heic_ext, "wb").write(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 16)
 calls.clear()
 check("HEIC by extension is rejected before upload", expect_exit(lambda: mp.add(heic_ext, send=fake_send)) and not calls)
 
-heic_magic = os.path.join(d, "actually_heic.jpg")  # .jpg name but HEIC content
+heic_magic = os.path.join(d, "actually_heic.jpg")  # .jpg name but HEIC major brand
 open(heic_magic, "wb").write(b"\x00\x00\x00\x18ftypmif1" + b"\x00" * 16)
 calls.clear()
-check("HEIC magic caught even with a .jpg name", expect_exit(lambda: mp.add(heic_magic, send=fake_send)) and not calls)
+check("HEIC magic (major brand) caught even with a .jpg name", expect_exit(lambda: mp.add(heic_magic, send=fake_send)) and not calls)
+
+# HEIC where the MAJOR brand is benign but a COMPATIBLE brand is heic — still caught.
+# ftyp box (size 0x18=24): size + 'ftyp' + major 'mp42' + minor 0 + compat 'mp41','heic'
+heic_compat = os.path.join(d, "looks_ok.jpg")
+open(heic_compat, "wb").write(b"\x00\x00\x00\x18ftyp" + b"mp42" + b"\x00\x00\x00\x00" + b"mp41heic")
+calls.clear()
+check("HEIC via a COMPATIBLE brand is refused", expect_exit(lambda: mp.add(heic_compat, send=fake_send)) and not calls)
+
+# --- positive allowlist: a non-image is refused before upload ---
+notimg = os.path.join(d, "not-image.jpg")  # .jpg name, but it's text
+open(notimg, "wb").write(b"This is plain text, not an image.\n")
+calls.clear()
+check("non-image (text) refused before upload", expect_exit(lambda: mp.add(notimg, send=fake_send)) and not calls)
+
+# --- a real PNG passes the guard and uploads ---
+png = os.path.join(d, "pic.png")
+open(png, "wb").write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32)
+calls.clear()
+fake_send.ret = (200, json.dumps({"stored": "up_1_p.jpg", "upCount": 1}))
+mp.add(png, send=fake_send)
+check("real PNG passes the allowlist and uploads", len(calls) == 1 and calls[0]["method"] == "POST")
 
 # --- HTTP error mapping: clean exit, no crash ---
 for status in (401, 400, 413):

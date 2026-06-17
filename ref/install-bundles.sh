@@ -326,9 +326,9 @@ trap - EXIT
 
 echo "" >&2
 echo "Agent installed:" >&2
-echo "  7 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
+echo "  8 bundles (ld-shared, ld-calendar-nudge, ld-morning-triage," >&2
 echo "             ld-morning-updates, ld-weekly-digest, ld-weather," >&2
-echo "             ld-sports) posted" >&2
+echo "             ld-sports, ld-photo) posted" >&2
 echo "             in one transaction to plowd at $PLOWD_URL" >&2
 echo "  dashboard-endpoint-url, dashboard-token landed in $SECRETS_DIR" >&2
 echo "  ld-config resolved at $LD_CONFIG" >&2

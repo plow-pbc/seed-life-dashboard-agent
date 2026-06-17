@@ -36,8 +36,10 @@ TOKEN_FILE = "/config/secrets/dashboard-token"
 BASE_FILE = "/config/secrets/viewer-base-url"
 MAX_BYTES = 15 * 1024 * 1024  # mirror the viewer's upload cap; fail before a wasted POST
 
-# HEIC/HEIF ISO-BMFF brands — the 4 bytes after the `ftyp` box marker (at 4..8).
-HEIC_BRANDS = {b"heic", b"heix", b"heif", b"mif1", b"heim", b"heis", b"hevc", b"hevx", b"hevm", b"hevs"}
+# HEIF/HEIC family brands (HEIC = HEVC-coded HEIF). A file is HEIC/HEIF if its
+# ISO-BMFF `ftyp` box names any of these as the MAJOR brand OR a COMPATIBLE one.
+HEIF_BRANDS = {b"heic", b"heix", b"heif", b"heim", b"heis", b"hevc", b"hevx",
+               b"hevm", b"hevs", b"mif1", b"msf1"}
 
 
 def _die(msg):
@@ -89,10 +91,48 @@ def _send(method, url, tok, body=None):
         _die(f"cannot reach the viewer at {url} — is the host's Tailscale up? ({e.reason})")
 
 
+def _ftyp_brands(buf):
+    """All brands (major + compatible) from a leading ISO-BMFF `ftyp` box,
+    lowercased; empty set if the buffer doesn't start with one."""
+    if len(buf) < 12 or buf[4:8] != b"ftyp":
+        return set()
+    size = int.from_bytes(buf[0:4], "big")
+    # size 0 (box runs to EOF), 1 (64-bit largesize), or an oversized/garbage
+    # value → just scan what we actually have.
+    if size < 16 or size > len(buf):
+        size = len(buf)
+    brands = {buf[8:12].lower()}  # major brand
+    off = 16  # compatible brands follow the 4-byte minor_version at 12:16
+    while off + 4 <= size:
+        brands.add(buf[off:off + 4].lower())
+        off += 4
+    return brands
+
+
 def is_heic(buf, path):
-    if len(buf) >= 12 and buf[4:8] == b"ftyp" and buf[8:12].lower() in HEIC_BRANDS:
+    # Match the HEIF/HEIC family by ANY ftyp brand (major or compatible), so a
+    # .jpg-named HEIC whose major brand is benign but lists heic/mif1/… as a
+    # compatible brand is still caught. Extension check kept as a backstop.
+    if HEIF_BRANDS & _ftyp_brands(buf):
         return True
     return path.lower().endswith((".heic", ".heif"))
+
+
+def sniff_image(buf):
+    """Positive magic-byte allowlist of formats the viewer's sharp can decode.
+    Returns the format name, or None for anything not recognized (→ refused
+    before upload, so non-images never reach the POST)."""
+    if buf[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if buf[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if buf[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if len(buf) >= 12 and buf[:4] == b"RIFF" and buf[8:12] == b"WEBP":
+        return "webp"
+    if buf[:4] in (b"II*\x00", b"MM\x00*"):
+        return "tiff"
+    return None
 
 
 def _explain(status, text):
@@ -117,6 +157,9 @@ def add(image_path, send=_send):
     if is_heic(buf, image_path):
         _die("HEIC/HEIF can't be uploaded from this environment (no decoder in the agent VM, and the "
              "viewer rejects HEIC). Provide a JPEG/PNG rendition of the photo instead.")
+    if sniff_image(buf) is None:
+        _die("that file isn't a supported image — send a JPEG, PNG, GIF, WEBP, or TIFF "
+             "(the kiosk viewer can't decode this format).")
     payload = {"filename": os.path.basename(image_path), "data": base64.b64encode(buf).decode("ascii")}
     status, text = send("POST", viewer_base() + "/api/banners", token(), payload)
     if status == 200:
