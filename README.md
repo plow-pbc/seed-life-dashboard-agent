@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A SEED that installs the seven `ld-*` "life-dashboard" agent skill bundles into a local Plow:
+A SEED that installs the eight `ld-*` "life-dashboard" agent skill bundles into a local Plow:
 
 - `ld-shared` — the shared `post_to_kiosk.py` POST helper used by the **wrapper-based** post scripts (`post_alert.py` / `post_message.py` / `post_digest.py` / `post_nudge.py`). The Pattern-B scheduled runners (`ld-weather`, `ld-sports`, and `ld-calendar-nudge`'s `scheduled/run.js`) post directly instead. **`ld-shared` is the shared contract layer**, pulled from [`plow-pbc/life-dashboard-skills`](https://github.com/plow-pbc/life-dashboard-skills) at install/test time (`ref/sync-ld-shared.sh`) and not vendored here — both life-dashboard agent seeds pull the same copy.
 - `ld-calendar-nudge` — scheduled-runner calendar nudges (`scheduled/run.js`; no `cron action=add`).
@@ -11,8 +11,9 @@ A SEED that installs the seven `ld-*` "life-dashboard" agent skill bundles into 
 - `ld-weekly-digest` — weekly digest cards.
 - `ld-weather` — hourly weather card (current temp + forecast high/low + condition) from the National Weather Service.
 - `ld-sports` — quarter-hourly sports card (Apple-Sports-style scoreboard for the household's followed teams) from ESPN's public scoreboard feed.
+- `ld-photo` — request-triggered: a texted photo, base64-uploaded to the viewer's banner CRUD endpoint over Tailscale, into the kiosk's photo rotation (the viewer resizes; only manages the `up_*` texted set, never the curated `s2_*`).
 
-This repo is the source-of-truth for the **six platform-specific** `ld-*` producer bundles — they live at `ref/team-skills/` and are authored and fixed here. The seventh, `ld-shared`, is the shared contract layer pulled from [`plow-pbc/life-dashboard-skills`](https://github.com/plow-pbc/life-dashboard-skills) (see above). The install POSTs each bundle to plowd's `/marketplace/api/install-local-bundles` endpoint (the same path `just sync-team-skills` uses); plowd does atomic-swap-with-rollback into the agent's skills root — `~/Plow/skills/` on current builds, or a container workspace (`containers/<UUID>/workspace[/host]/skills/`) on v2 builds.
+This repo is the source-of-truth for the **seven platform-specific** `ld-*` producer bundles — they live at `ref/team-skills/` and are authored and fixed here. The eighth, `ld-shared`, is the shared contract layer pulled from [`plow-pbc/life-dashboard-skills`](https://github.com/plow-pbc/life-dashboard-skills) (see above). The install POSTs each bundle to plowd's `/marketplace/api/install-local-bundles` endpoint (the same path `just sync-team-skills` uses); plowd does atomic-swap-with-rollback into the agent's skills root — `~/Plow/skills/` on current builds, or a container workspace (`containers/<UUID>/workspace[/host]/skills/`) on v2 builds.
 
 The bundles need a `dashboard-endpoint-url` + `dashboard-token` to POST their cards to. This SEED reads `DASHBOARD_ENDPOINT_URL` (the full `/api/message` URL of the household's Pi message API) and `DASHBOARD_TOKEN` (its bearer) from the environment and writes them to `~/Library/Application Support/co.plow.app/agent-runtime/secrets/` (mode 600) for the bundles to consume.
 
