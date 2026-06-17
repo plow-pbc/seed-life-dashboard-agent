@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 verify-report.json
 install-report.json
+# ld-shared is the shared contract layer pulled from plow-pbc/life-dashboard-skills
+# at install + test time (ref/sync-ld-shared.sh), never vendored here.
+ref/team-skills/ld-shared/
