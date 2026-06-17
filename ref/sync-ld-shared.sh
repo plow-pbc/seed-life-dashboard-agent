@@ -19,13 +19,14 @@ DEST="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/team-skills" && pwd)/ld-shared"
 
 command -v git >/dev/null || { echo "sync-ld-shared: git is required" >&2; exit 1; }
 
-# Reject a credential-bearing LD_SKILLS_REPO: userinfo in an http(s) URL
-# (scheme://user:pass@host) would surface in git's argv (visible in `ps`) and in
-# the status/error messages below; a query/fragment has no place in a clone URL.
-# (An scp-style SSH URL like git@host:path carries no secret and is left alone.)
-# Same posture install-bundles.sh applies to DASHBOARD_ENDPOINT_URL.
+# Reject a credential-bearing LD_SKILLS_REPO: userinfo in ANY scheme URL
+# (scheme://user:pass@host — http(s), ssh, git, …) would surface in git's argv
+# (visible in `ps`) and in the status/error messages below; a query/fragment has
+# no place in a clone URL. An scp-style SSH URL (git@host:path — no `://`)
+# carries no secret and is left alone. Same posture install-bundles.sh applies to
+# DASHBOARD_ENDPOINT_URL.
 case "$REPO" in
-  http://*|https://*)
+  *://*)
     _auth="${REPO#*://}"; _auth="${_auth%%/*}"
     case "$_auth" in
       *@*) echo "sync-ld-shared: LD_SKILLS_REPO must not contain userinfo (user:pass@); use a credential-free URL" >&2; exit 1 ;;
