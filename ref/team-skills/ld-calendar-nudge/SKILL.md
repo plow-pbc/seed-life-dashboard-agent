@@ -329,14 +329,18 @@ Then:
 1. **Kiosk** — run the helper by absolute path (the cron's working directory
    is not the bundle's directory), feeding the reminder text on **stdin** via
    a quoted heredoc. Use your **shell** tool — the file-writing tool cannot
-   create a handoff file in the read-only sandbox:
+   create a handoff file in the read-only sandbox. **Pick a fresh, unguessable
+   heredoc delimiter each run** (e.g. `LD_END_` + a dozen random hex chars) and
+   confirm it is not a line in the reminder — a *fixed* delimiter a crafted
+   message could reproduce would close the heredoc early and run the rest as
+   shell:
 
-       /workspace/host/skills/ld-calendar-nudge/scripts/post_nudge.py <<'__LD_MSG__'
+       /workspace/host/skills/ld-calendar-nudge/scripts/post_nudge.py <<'LD_END_3f9c2a7e8b1d'
        <the reminder text>
-       __LD_MSG__
+       LD_END_3f9c2a7e8b1d
 
-   The **quoted** delimiter keeps the reminder as literal stdin data (never
-   parsed as shell). The helper reads endpoint + token from the same
+   (Example delimiter — generate a fresh one.) The **quoted** delimiter keeps
+   the reminder as literal stdin data (never parsed as shell). The helper reads endpoint + token from the same
    `/config/secrets/` paths the other ld- bundles use and posts the reminder
    to the kiosk as card 1 with `type: "alert"` (the slot shared with
    `ld-morning-triage` — the store keeps the latest post per card).
