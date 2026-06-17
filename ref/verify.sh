@@ -118,10 +118,8 @@ echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 # host with rebound module-level constants. This proves the secrets
 # resolve and the wrapper executes; it does NOT post over the network.
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
-DRY_INPUT=$(mktemp -t agent-verify-msg)
 DRY_OUT=$(mktemp -t agent-verify-out)
-trap 'rm -f "$DRY_INPUT" "$DRY_OUT"' EXIT
-echo "hello from verify" > "$DRY_INPUT"
+trap 'rm -f "$DRY_OUT"' EXIT
 # Capture the dry-run's exit status explicitly (no `|| true`): a hard
 # failure (e.g. a Python import error in the wrapper) must fail verify,
 # not be silently masked so the grep becomes the only signal. The
@@ -131,9 +129,8 @@ DRY_RC=0
 WRAPPER="$SEED_ROOT/ref/team-skills/ld-morning-updates/scripts/post_message.py" \
 ENDPOINT_FILE="$SECRETS_DIR/dashboard-endpoint-url" \
 TOKEN_FILE="$SECRETS_DIR/dashboard-token" \
-DRY_INPUT="$DRY_INPUT" \
 python3 - >"$DRY_OUT" 2>&1 <<'PY' || DRY_RC=$?
-import os, sys, importlib.util
+import os, sys, io, importlib.util
 # Load a REAL wrapper so its CARD/BODY_TYPE assignments are load-bearing:
 # a wrapper missing the CARD contract must fail this check, not be masked
 # by verify assigning the constants itself.
@@ -141,11 +138,12 @@ spec = importlib.util.spec_from_file_location("post_message", os.environ["WRAPPE
 wrapper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wrapper)
 ptk = wrapper.post_to_kiosk
-# Rebind ONLY the host-side file paths (the wrapper hardcodes the VM
-# paths /config/secrets/... and its /tmp message file).
+# Rebind ONLY the host-side secret-file paths (the wrapper hardcodes the
+# VM /config/secrets/... paths). The message text is fed on stdin, as in
+# prod — the helper reads stdin, never a file the agent must create.
 ptk.ENDPOINT_FILE = os.environ["ENDPOINT_FILE"]
 ptk.TOKEN_FILE = os.environ["TOKEN_FILE"]
-ptk.MESSAGE_FILE = os.environ["DRY_INPUT"]
+sys.stdin = io.StringIO("hello from verify")
 sys.argv = ["post_message.py", "--dry-run"]
 try:
     ptk.main()

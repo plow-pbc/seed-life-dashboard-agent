@@ -326,21 +326,28 @@ still clip on the kiosk (the viewer's line clamp is the backstop).
 
 Then:
 
-1. **Kiosk** — write the reminder text to `/tmp/ld-calendar-nudge-text`
-   with your file-writing tool, then run the helper by absolute path
-   (the cron's working directory is not the bundle's directory):
+1. **Kiosk** — run the helper by absolute path (the cron's working directory
+   is not the bundle's directory), feeding the reminder text on **stdin** via
+   a quoted heredoc. Use your **shell** tool — the file-writing tool cannot
+   create a handoff file in the read-only sandbox. **Pick a fresh, unguessable
+   heredoc delimiter each run** (e.g. `LD_END_` + a dozen random hex chars) and
+   confirm it is not a line in the reminder — a *fixed* delimiter a crafted
+   message could reproduce would close the heredoc early and run the rest as
+   shell:
 
-       /workspace/host/skills/ld-calendar-nudge/scripts/post_nudge.py
+       /workspace/host/skills/ld-calendar-nudge/scripts/post_nudge.py <<'LD_END_3f9c2a7e8b1d'
+       <the reminder text>
+       LD_END_3f9c2a7e8b1d
 
-   The helper reads endpoint + token from the same `/config/secrets/`
-   paths the other ld- bundles use, posts the reminder to the kiosk
-   as card 1 with `type: "alert"` (the slot shared with
-   `ld-morning-triage` — the store keeps the latest post per card),
-   and consumes the handoff file on success.
+   (Example delimiter — generate a fresh one.) The **quoted** delimiter keeps
+   the reminder as literal stdin data (never parsed as shell). The helper reads endpoint + token from the same
+   `/config/secrets/` paths the other ld- bundles use and posts the reminder
+   to the kiosk as card 1 with `type: "alert"` (the slot shared with
+   `ld-morning-triage` — the store keeps the latest post per card).
    Fails loudly on any non-200 response — surface that and stop; do
    not continue to the iMessage step on a failed kiosk post.
 
-   Preview without sending: `… post_nudge.py --dry-run`.
+   Preview without sending: add `--dry-run` before the heredoc.
 
 2. **iMessage** — after the kiosk post succeeds, end the turn by
    returning the same reminder text as the agent's final response. The
