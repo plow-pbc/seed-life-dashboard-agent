@@ -30,8 +30,8 @@ LD_CONFIG="$LD_CONFIG_DIR/config.json"
   exit 1
 }
 
-# 2. Required tools.
-for tool in jq tar lsof pgrep python3 awk; do
+# 2. Required tools. `git` is needed to pull the shared ld-shared contract layer.
+for tool in jq tar lsof pgrep python3 awk git; do
   command -v "$tool" >/dev/null \
     || { echo "missing required tool: $tool" >&2; exit 1; }
 done
@@ -39,6 +39,13 @@ done
 SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 BUNDLES_DIR="$SEED_ROOT/ref/team-skills"
 [ -d "$BUNDLES_DIR" ] || { echo "no $BUNDLES_DIR — incomplete checkout?" >&2; exit 1; }
+
+# 2b. Pull the shared ld-shared contract layer (post_to_kiosk helper + the
+#     kiosk wire/tile protocol + the ld-config template) from
+#     plow-pbc/life-dashboard-skills. It is NOT vendored in this seed — both
+#     life-dashboard agent seeds pull the same canonical copy, so a producer-
+#     POST fix lands once. ld-shared MUST be present before the bundle tar below.
+bash "$SEED_ROOT/ref/sync-ld-shared.sh"
 
 # 3. Discover plowd's HTTP API port. Same pattern as plow4/justfile.
 if [ -s "$APP_SUPPORT/dev-plowd-port" ]; then

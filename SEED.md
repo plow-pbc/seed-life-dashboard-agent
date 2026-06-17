@@ -15,9 +15,10 @@ API / per-machine state:
 
 Software:
 
+- `https://github.com/plow-pbc/life-dashboard-skills` — the shared **ld-shared contract layer**: the `post_to_kiosk.py` helper every producer wrapper calls, the kiosk wire/tile protocol (`references/kiosk-protocol.md`), and the canonical `ld-config` template. This SEED does NOT vendor `ld-shared`; [`ref/sync-ld-shared.sh`](ref/sync-ld-shared.sh) clones this repo (`git`, default branch `main`; `LD_SKILLS_REF`/`LD_SKILLS_REPO` override for dev/CI) and materializes `ref/team-skills/ld-shared/` at install + test time. The Hermes agent seed (`seed-life-dashboard-hermes-agent`) pulls the SAME copy, so a producer-POST or protocol fix lands once instead of being hand-applied to two repos.
 - `https://github.com/plow-pbc/seed-plow-app` — installs Plow.app and activates it. Provides its [activation verify check](https://github.com/plow-pbc/seed-plow-app/blob/main/SEED.md#verify) (the `plow-api-token` post-condition); also lands the `plow-local-token` this SEED uses to authenticate to plowd's marketplace endpoint.
 - `https://github.com/plow-pbc/seed-life-dashboard-viewer` — an HTML-capable kiosk viewer is a REQUIRED runtime. `ld-weather` (card 3) and `ld-sports` (card 5) post **self-contained HTML tiles** (each ships its own `<style>`) that the viewer renders verbatim; the viewer holds no widget CSS, so these bundles depend only on the generic box-renderer (PR #40) and its shared theme tokens the producer styles reference. (The optional producer `title` field the alert/affirmation bundles use to hide their eyebrows is viewer PR #43.) Installed against an older viewer that does not render card HTML, those two cards display literal markup tags — install/upgrade the viewer before this SEED.
-- System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`. No install needed.
+- System tools at `/usr/bin/*`: `curl`, `tar`, `jq`, `lsof`, `pgrep`, `python3`, `awk`, `git` (`git` pulls the shared `ld-shared` layer). No install needed.
 
 ### Requirements
 
@@ -46,8 +47,8 @@ bash "$(dirname "${BASH_SOURCE[0]:-$0}")/ref/install-bundles.sh"
 
 ### `ld-*` bundles
 
-- This repo is the **source-of-truth** for the seven `ld-*` skill bundles — they live under `ref/team-skills/ld-*/` and are authored and fixed here. There is no upstream the copies track; a fix to bundle behavior lands in this repo.
-- The seven installed bundle directories `ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest,weather,sports}/`. The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/host/skills/ld-<name>/`, which is the path the agent reads.
+- This repo is the **source-of-truth** for the SIX platform-specific `ld-*` producer bundles — `ld-{calendar-nudge,morning-triage,morning-updates,weekly-digest,weather,sports}/` under `ref/team-skills/`. These carry the Plow-specific behavior (the deterministic `scheduled/` JS runners, the iMessage+Gmail triage, the read-only-sandbox stdin POST path) and are authored and fixed here. The seventh bundle, **`ld-shared`**, is NOT authored here: it is the shared contract layer pulled from [`plow-pbc/life-dashboard-skills`](https://github.com/plow-pbc/life-dashboard-skills) by [`ref/sync-ld-shared.sh`](ref/sync-ld-shared.sh) at install + test time (and gitignored locally), so a `post_to_kiosk`/protocol fix lands once across both agent seeds. A producer wrapper imports `post_to_kiosk` from the sibling `ld-shared/scripts/`, so the pulled copy resolves unchanged.
+- The seven installed bundle directories `ld-{calendar-nudge,morning-triage,morning-updates,shared,weekly-digest,weather,sports}/` (six from this repo + the pulled `ld-shared`). The host-side install root is plowd-build-dependent: current builds install to `~/Plow/skills/ld-*`; v2 container builds use `<app_support>/containers/<container-UUID>/workspace/skills/ld-*` (or `…/workspace/host/skills/ld-*`). Regardless of host layout, plowd presents them to the agent VM at `/workspace/host/skills/ld-<name>/`, which is the path the agent reads.
 
 ### Dashboard secrets
 
