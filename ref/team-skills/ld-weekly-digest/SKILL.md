@@ -86,9 +86,8 @@ sensitive titles AND locations entirely (don't generalize, don't paraphrase
 — omit). When in doubt, omit. The block-by-day rendering counts as a
 single calendar slot, so "Wed — 2 appointments" with the slot otherwise
 empty is the right fallback over leaking a sensitive title via the count.
-This rule applies to the iMessage surface too — the digest text written to
-`/tmp/ld-weekly-digest-text` is the same text returned as the agent's final
-response.
+This rule applies to the iMessage surface too — the digest text fed to the
+helper on stdin is the same text returned as the agent's final response.
 
 ## Long-lead heads-up
 
@@ -134,19 +133,23 @@ none. The privacy boundary applies whatever the length.
 
 The digest is delivered on two surfaces, in this order:
 
-1. **Kiosk** — write the digest text to `/tmp/ld-weekly-digest-text`
-   with your file-writing tool, then run the helper by absolute path
-   (the cron's working directory is not the bundle's directory):
+1. **Kiosk** — run the helper by absolute path (the cron's working directory
+   is not the bundle's directory), feeding the digest text on **stdin** via a
+   quoted heredoc. Use your **shell** tool — the file-writing tool cannot
+   create a handoff file in the read-only sandbox:
 
-       /workspace/host/skills/ld-weekly-digest/scripts/post_digest.py
+       /workspace/host/skills/ld-weekly-digest/scripts/post_digest.py <<'__LD_MSG__'
+       <the digest text>
+       __LD_MSG__
 
-   The helper reads endpoint + token from the same `/config/secrets/`
-   paths the other ld- bundles use, posts the digest to the kiosk as
-   card 4 with `type: "digest"`, and consumes the handoff file on success. Fails
-   loudly on any non-200 response — surface that and stop; do not
-   continue to the iMessage step on a failed kiosk post.
+   The **quoted** delimiter keeps the digest as literal stdin data (never
+   parsed as shell). The helper reads endpoint + token from the same
+   `/config/secrets/` paths the other ld- bundles use and posts the digest to
+   the kiosk as card 4 with `type: "digest"`. Fails loudly on any non-200
+   response — surface that and stop; do not continue to the iMessage step on a
+   failed kiosk post.
 
-   Preview without sending: `… post_digest.py --dry-run`.
+   Preview without sending: add `--dry-run` before the heredoc.
 
 2. **iMessage** — after the kiosk post succeeds, end the turn by
    returning the same digest text as the agent's final response. The

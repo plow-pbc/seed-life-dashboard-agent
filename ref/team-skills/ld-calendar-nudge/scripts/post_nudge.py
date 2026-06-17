@@ -2,7 +2,8 @@
 """post_nudge.py — post ld-calendar-nudge's kiosk reminder.
 
 Thin wrapper over `team-skills/ld-shared/scripts/post_to_kiosk.py`: sets
-the bundle-specific MESSAGE_FILE + CARD + BODY_TYPE, then dispatches.
+the bundle-specific CARD + BODY_TYPE + TITLE, then dispatches. The
+reminder text is fed to the helper on stdin (quoted heredoc).
 
 Posts as card 1 / type "alert" — calendar reminders share the alert slot
 with ld-morning-triage (the store is latest-per-card, so the newest of
@@ -17,7 +18,6 @@ sys.path.insert(
 )
 import post_to_kiosk  # noqa: E402
 
-post_to_kiosk.MESSAGE_FILE = "/tmp/ld-calendar-nudge-text"
 post_to_kiosk.CARD = "1"
 post_to_kiosk.BODY_TYPE = "alert"
 post_to_kiosk.TITLE = ""  # hide the eyebrow — matches the scheduled run.js alert post
