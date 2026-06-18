@@ -6,6 +6,20 @@ const { run, inNudgeWindow } = require("./run.js");
 
 const TZ = "America/Los_Angeles";
 
+// The owner's own LinQ handle, as returned by GET /v1/me/channels. run.js
+// resolves this at fire time and passes it as the `thread_handle` for
+// owner-self iMessage delivery (the API dropped the legacy `to:"owner"`
+// sentinel — an explicit handle is now required).
+const OWNER_HANDLE = "+16505551212";
+function meChannelsResponse(channels) {
+  return {
+    ok: true,
+    async json() {
+      return { channels: channels ?? [{ provider: "linq", provider_key: OWNER_HANDLE }] };
+    },
+  };
+}
+
 function baseConfig(overrides = {}) {
   return {
     family: { timezone: TZ },
@@ -61,6 +75,7 @@ test("in-window tick with a qualifying meeting posts kiosk + iMessage", async ()
     if (url.includes("/calendar.events.list")) {
       return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
     }
+    if (url.includes("/v1/me/channels")) return meChannelsResponse();
     return { ok: true, async json() { return {}; } };
   };
   const res = await run({
@@ -86,6 +101,14 @@ test("in-window tick with a qualifying meeting posts kiosk + iMessage", async ()
   assert.ok(typeof body.text === "string" && body.text.length > 0);
   assert.equal(body.title, ""); // empty title hides the alert eyebrow
   assert.deepEqual(Object.keys(body).sort(), ["card", "text", "title", "type"]);
+  // iMessage wire body: owner-self delivery now requires the resolved
+  // thread_handle (the owner's own LinQ handle from /v1/me/channels); the
+  // legacy `to:"owner"` sentinel is gone (it 422s server-side).
+  const send = calls.find((c) => c.url.includes("/channels/linq/send"));
+  const sendBody = JSON.parse(send.body);
+  assert.equal(sendBody.thread_handle, OWNER_HANDLE);
+  assert.ok(typeof sendBody.text === "string" && sendBody.text.length > 0);
+  assert.ok(!("to" in sendBody), "the dead to:'owner' sentinel must not be sent");
 });
 
 // In-window but nothing qualifies → silent, no kiosk/iMessage.
@@ -149,6 +172,7 @@ test("reads config + tokens from mounted /config paths (readFile seam)", async (
     if (url.includes("/calendar.events.list")) {
       return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
     }
+    if (url.includes("/v1/me/channels")) return meChannelsResponse();
     return { ok: true, async json() { return {}; } };
   };
   const res = await run({ now, fetch: fetchImpl, readFile });
@@ -174,6 +198,7 @@ test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", asyn
     if (url.includes("/calendar.events.list")) {
       return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
     }
+    if (url.includes("/v1/me/channels")) return meChannelsResponse();
     return { ok: true, async json() { return {}; } };
   };
   const res = await run({
@@ -188,6 +213,43 @@ test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", asyn
   assert.equal(res.sent, true);
   assert.ok(calls.some((c) => c.url === "http://rpi5screen:5174/api/message"));
 });
+
+// Owner-self delivery needs the owner's LinQ handle from /v1/me/channels. Each
+// way that resolution can fail must fail loud rather than send a malformed
+// body — and only AFTER the kiosk reminder has posted, so a degraded send path
+// never suppresses the glanceable surface (and never silently sends nothing).
+for (const { name, meResponse, expected } of [
+  { name: "non-2xx response", meResponse: { ok: false, status: 500, async json() { return {}; } }, expected: /me\/channels 500/ },
+  { name: "malformed payload (channels not an array)", meResponse: { ok: true, async json() { return { channels: null }; } }, expected: /me\/channels malformed response/ },
+  { name: "no linq channel provisioned", meResponse: meChannelsResponse([]), expected: /no linq channel/ },
+]) {
+  test(`/v1/me/channels ${name} throws after kiosk posts, no send attempted`, async () => {
+    const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(url);
+      if (url.includes("/calendar.events.list")) {
+        return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+      }
+      if (url.includes("/v1/me/channels")) return meResponse;
+      return { ok: true, async json() { return {}; } };
+    };
+    await assert.rejects(
+      () => run({
+        now,
+        fetch: fetchImpl,
+        config: baseConfig(),
+        apiUrl: "https://api.test",
+        apiToken: "tok",
+        dashUrl: "https://dash.test/api/message",
+        dashToken: "dtok",
+      }),
+      expected,
+    );
+    assert.ok(calls.some((u) => u === "https://dash.test/api/message"), "kiosk posted before the throw");
+    assert.ok(!calls.some((u) => u.includes("/channels/linq/send")), "no send attempted without a handle");
+  });
+}
 
 test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
   const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
