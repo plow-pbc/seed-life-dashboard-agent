@@ -31,10 +31,8 @@ import sys
 import urllib.error
 import urllib.request
 
-DEFAULT_BASE = "http://rpi5mary.tail3b4d58.ts.net/fd"
 TOKEN_FILE = "/config/secrets/dashboard-token"
 BASE_FILE = "/config/secrets/viewer-base-url"
-MAX_BYTES = 15 * 1024 * 1024  # mirror the viewer's upload cap; fail before a wasted POST
 
 # HEIF/HEIC family brands (HEIC = HEVC-coded HEIF). A file is HEIC/HEIF if its
 # ISO-BMFF `ftyp` box names any of these as the MAJOR brand OR a COMPATIBLE one.
@@ -56,7 +54,18 @@ def _read_file(path):
 
 
 def viewer_base():
-    return (os.environ.get("VIEWER_BASE_URL", "").strip() or _read_file(BASE_FILE) or DEFAULT_BASE).rstrip("/")
+    # File-first, env fallback — same posture as token() and ld-shared's
+    # post_to_kiosk (the read-only /config/secrets mount is canonical).
+    base = _read_file(BASE_FILE) or os.environ.get("VIEWER_BASE_URL", "").strip()
+    if not base:
+        _die("no VIEWER_BASE_URL (set /config/secrets/viewer-base-url or the VIEWER_BASE_URL env var "
+             "to the viewer's full tailnet FQDN + the /fd serve prefix)")
+    # Validate before attaching the bearer — a non-http(s) or whitespace-bearing
+    # base must fail loud, not steer an authenticated request somewhere unexpected
+    # (same guard ld-shared's installer applies to DASHBOARD_ENDPOINT_URL).
+    if not base.startswith(("http://", "https://")) or any(c.isspace() for c in base):
+        _die(f"VIEWER_BASE_URL must be a whitespace-free http(s):// URL, got: {base}")
+    return base.rstrip("/")
 
 
 def token():
@@ -135,6 +144,15 @@ def sniff_image(buf):
     return None
 
 
+def _ok_body(text):
+    """Parse a 200 response body, tolerating a non-JSON body without crashing
+    (the success message just falls back to '?' placeholders)."""
+    try:
+        return json.loads(text) if text else {}
+    except ValueError:
+        return {}
+
+
 def _explain(status, text):
     hint = {
         401: "the DASHBOARD_TOKEN does not match the Pi's — tell the head chef the token is wrong",
@@ -152,8 +170,6 @@ def add(image_path, send=_send):
         _die(f"cannot read {image_path}: {e}")
     if not buf:
         _die("the file is empty")
-    if len(buf) > MAX_BYTES:
-        _die(f"the image is {len(buf) // 1024 // 1024} MB — over the 15 MB upload cap")
     if is_heic(buf, image_path):
         _die("HEIC/HEIF can't be uploaded from this environment (no decoder in the agent VM, and the "
              "viewer rejects HEIC). Provide a JPEG/PNG rendition of the photo instead.")
@@ -163,7 +179,7 @@ def add(image_path, send=_send):
     payload = {"filename": os.path.basename(image_path), "data": base64.b64encode(buf).decode("ascii")}
     status, text = send("POST", viewer_base() + "/api/banners", token(), payload)
     if status == 200:
-        r = json.loads(text) if text else {}
+        r = _ok_body(text)
         print(f"ld-photo: added {r.get('stored', '?')} to the kiosk rotation "
               f"(texted photos kept: {r.get('upCount', '?')}; curated family set untouched)")
         return
@@ -173,7 +189,7 @@ def add(image_path, send=_send):
 def clear(send=_send):
     status, text = send("DELETE", viewer_base() + "/api/banners", token(), None)
     if status == 200:
-        r = json.loads(text) if text else {}
+        r = _ok_body(text)
         print(f"ld-photo: cleared {r.get('removed', '?')} texted (up_*) photo(s); curated family set untouched")
         return
     _explain(status, text)

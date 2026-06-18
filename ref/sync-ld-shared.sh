@@ -5,7 +5,7 @@
 # it is gitignored. It is the shared contract layer BOTH life-dashboard agent
 # seeds pull (the kiosk-POST helper + the wire/tile protocol + the ld-config
 # template), so a fix lands once upstream instead of being hand-applied to two
-# repos. This seed owns only its six platform-specific producers.
+# repos. This seed owns only its seven platform-specific producers.
 #
 # Idempotent: re-running refreshes the pinned ref. Overridable for dev/CI:
 #   LD_SKILLS_REPO  — clone source (default: the public GitHub repo)

@@ -122,5 +122,15 @@ os.environ.pop("DASHBOARD_TOKEN", None)
 check("missing token → clean error", expect_exit(mp.token))
 os.environ["DASHBOARD_TOKEN"] = "testtok"
 
+# --- missing VIEWER_BASE_URL (no env, no file) → clean error, no committed default ---
+os.environ.pop("VIEWER_BASE_URL", None)
+check("missing VIEWER_BASE_URL → clean error", expect_exit(mp.viewer_base))
+
+# --- malformed VIEWER_BASE_URL is rejected before any bearer-authed request ---
+for bad in ("pi.example/fd", "ftp://pi.example/fd", "http://pi.example /fd"):
+    os.environ["VIEWER_BASE_URL"] = bad
+    check(f"malformed base {bad!r} → clean error", expect_exit(mp.viewer_base))
+os.environ["VIEWER_BASE_URL"] = "http://pi.example/fd"
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
