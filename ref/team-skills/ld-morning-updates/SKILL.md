@@ -210,7 +210,13 @@ to `<redacted, N chars>`):
     <the affirmation text>
     LD_END_3f9c2a7e8b1d
 
-After posting, emit a one-line summary of what was posted.
+After running the helper — **whether or not the kiosk post succeeded** — emit
+a one-line summary that **includes the affirmation text**, so the cron's
+iMessage announce always reaches the owner. The kiosk is a best-effort
+*secondary* surface: if the helper exits non-zero (the Pi can be briefly
+unreachable on the tailnet), do **not** abort — prepend the fixed line
+`⚠️ Kiosk offline — dashboard not updated` and still return the affirmation as
+your final response.
 
 ## Scheduling
 
