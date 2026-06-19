@@ -208,8 +208,9 @@ emit a one-line summary that **repeats the `alert_text` verbatim**. The
 cron's `delivery.mode=announce` channels that final response to the owner's
 iMessage, the reliable surface; the kiosk is a best-effort *secondary* glance.
 If the helper exits non-zero (the Pi can be briefly unreachable on the
-tailnet), do **not** abort — still emit the alert (you may note the kiosk
-failure in a few words first) so a kiosk outage never suppresses the owner's
+tailnet), do **not** abort — still emit the alert (you may prepend a generic
+note like `kiosk unavailable`; never copy the helper's stderr, endpoint URL,
+or token into the message) so a kiosk outage never suppresses the owner's
 iMessage. (Anything safe to show on the kiosk is safe to iMessage the owner.)
 On a skipped run — zero candidates after the filter — emit a one-line "no
 alert today" instead so the owner's iMessage history reflects a deliberate

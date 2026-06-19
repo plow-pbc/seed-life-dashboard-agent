@@ -151,8 +151,10 @@ The digest is delivered on two surfaces, in this order:
    `/config/secrets/` paths the other ld- bundles use and posts the digest to
    the kiosk as card 4 with `type: "digest"`. The kiosk is a best-effort
    *secondary* surface: if the helper exits non-zero (an unreachable Pi or a
-   non-200 response), note it in one line but **do not stop** — still deliver
-   via iMessage below. A brief tailnet outage must never suppress the digest.
+   non-200 response), note it in one line — a generic `kiosk unavailable`,
+   never the helper's stderr, endpoint URL, or token — but **do not stop**:
+   still deliver via iMessage below. A brief tailnet outage must never suppress
+   the digest.
 
    Preview without sending: add `--dry-run` before the heredoc.
 

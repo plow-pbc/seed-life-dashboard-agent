@@ -215,7 +215,8 @@ a one-line summary that **includes the affirmation text**, so the cron's
 iMessage announce always reaches the owner. The kiosk is a best-effort
 *secondary* surface: if the helper exits non-zero (the Pi can be briefly
 unreachable on the tailnet), do **not** abort — still return the affirmation
-as your final response, noting the kiosk failure briefly.
+as your final response, noting only a generic `kiosk unavailable` (never copy
+the helper's stderr, endpoint URL, or token).
 
 ## Scheduling
 
