@@ -16,9 +16,13 @@ test:
     bash -n ref/install-bundles.sh
     bash -n ref/verify.sh
     bash -n ref/sync-ld-shared.sh
+    bash -n ref/ld-config-gate.sh
     # Pull the shared contract layer (override the ref/source via
     # LD_SKILLS_REF / LD_SKILLS_REPO for dev/CI against an unmerged branch).
     bash ref/sync-ld-shared.sh
+    # The seed's ld-config gate contract (local imessage check + union + sentinel
+    # pass-through) — needs ld-shared synced above.
+    bash ref/test-ld-config-gate.sh
     # Shared helper tests (both transports) + this seed's wrapper contracts.
     python3 ref/team-skills/ld-shared/scripts/test_post_to_kiosk.py
     python3 ref/team-skills/test_wrappers.py
