@@ -119,13 +119,34 @@ async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
   if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
 
-async function postImessage(fetchImpl, apiUrl, apiToken, text) {
+// Resolve the owner's own LinQ handle for owner-self delivery. The send API
+// dropped the legacy `to:"owner"` server-side resolution — it now requires an
+// explicit `thread_handle` (the owner's E.164). /v1/me/channels returns the
+// authenticated user's channels; the `linq` one's `provider_key` is that
+// handle. Same source plowd uses to seed its owner identity (people_sync).
+async function fetchOwnerHandle(fetchImpl, apiUrl, apiToken) {
+  const resp = await fetchImpl(`${apiUrl}/v1/me/channels`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${apiToken}` },
+  });
+  if (!resp.ok) throw new Error(`me/channels ${resp.status}`);
+  const channels = (await resp.json())?.channels;
+  if (!Array.isArray(channels)) throw new Error("me/channels malformed response");
+  const linq = channels.find(
+    (c) => c?.provider === "linq" && typeof c.provider_key === "string" && c.provider_key.length > 0,
+  );
+  if (!linq) throw new Error("me/channels: no linq channel for owner-self delivery");
+  return linq.provider_key;
+}
+
+async function postImessage(fetchImpl, apiUrl, apiToken, threadHandle, text) {
   const resp = await fetchImpl(`${apiUrl}/channels/linq/send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
-    // `to` is required by the schema but ignored server-side — the server
-    // resolves the recipient to the authenticated user's own LinQ phone.
-    body: JSON.stringify({ to: "owner", text }),
+    // Owner-self delivery: thread_handle is the owner's own LinQ handle
+    // (resolved via /v1/me/channels). The legacy `to:"owner"` sentinel was
+    // removed server-side and now 422s.
+    body: JSON.stringify({ thread_handle: threadHandle, text }),
   });
   if (!resp.ok) throw new Error(`channels/linq/send ${resp.status}`);
 }
@@ -193,8 +214,12 @@ async function run(opts = {}) {
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
 
   // Kiosk first; on a failed kiosk post, surface and stop (don't iMessage).
+  // Resolve the owner handle only after the kiosk reminder is up, so a
+  // /v1/me/channels hiccup degrades the iMessage leg without suppressing the
+  // glanceable surface.
   await postKiosk(fetchImpl, dashUrl, dashToken, text);
-  await postImessage(fetchImpl, apiUrl, apiToken, text);
+  const ownerHandle = await fetchOwnerHandle(fetchImpl, apiUrl, apiToken);
+  await postImessage(fetchImpl, apiUrl, apiToken, ownerHandle, text);
   log("nudge_sent", { count: qualifying.length });
   return { sent: true, count: qualifying.length };
 }
