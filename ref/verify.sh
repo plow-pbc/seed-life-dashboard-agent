@@ -77,9 +77,13 @@ fi
 echo "OK   v-ld-config"
 
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
-# SKILL.md); the other seven are full skills with SKILL.md.
+# SKILL.md) carrying BOTH shared helpers the producers load: the Python
+# post_to_kiosk (wrapper POST path) and the JS ld-runtime (scheduled runners
+# require it at module load) — probe both so a stale/partial ld-shared fails
+# the gate here instead of crashing the runners at their first tick.
 declare -a probes=(
   "ld-shared/scripts/post_to_kiosk.py"
+  "ld-shared/scripts/ld-runtime.js"
   "ld-calendar-nudge/SKILL.md"
   "ld-morning-triage/SKILL.md"
   "ld-morning-updates/SKILL.md"
