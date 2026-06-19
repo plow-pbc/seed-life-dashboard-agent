@@ -62,20 +62,16 @@ echo "OK   v-token-shape"
 # edited config may legitimately carry a non-host zone (laptop moved,
 # remote household), so enforcing it here would falsely reject a valid
 # config. PII never prints — only the failing invariant's name.
-LD_SHARED_GATE="$SEED_ROOT/ref/team-skills/ld-shared/scripts/ld_config_gate.py"
-[ -f "$LD_SHARED_GATE" ] || {
-  echo "FAIL v-ld-config: shared ld-config gate not found at $LD_SHARED_GATE — ld-shared not synced; run install first" >&2
-  exit 1
-}
+# Same gate install-bundles.sh enforces, defined once in ref/ld-config-gate.sh
+# (universal core via the shared ld-shared gate + the local imessage check) and
+# sourced by both — so install and verify can never drift. ld-shared is
+# materialized at install; verify runs post-install. If ld-shared is missing the
+# sourced gate fails loud with a "run install first" message rather than a bare
+# python file-not-found.
+. "$SEED_ROOT/ref/ld-config-gate.sh"
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-# Universal core (shared gate) + Plow-specific imessage check, joined the
-# same way install-bundles.sh's ld_config_gate() joins them.
-GATE=$(python3 "$LD_SHARED_GATE" "$LD_CONFIG")
-if [ "$GATE" != "not valid JSON" ] \
-   && [ "$(jq -r '(.family.owner.imessage // "") | test("\\S")' "$LD_CONFIG" 2>/dev/null)" != "true" ]; then
-  GATE="${GATE:+$GATE; }family.owner.imessage is blank"
-fi
+GATE=$(ld_config_gate "$LD_CONFIG")
 if [ -n "$GATE" ]; then
   echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate: $GATE" >&2
   echo "Fix the config (or re-run install with the LD_OWNER_* / LD_CALENDAR_ACCOUNT inputs set) before verifying." >&2

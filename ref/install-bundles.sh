@@ -123,39 +123,12 @@ unset DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN
 #    and the operator instructions all agree on it.
 mkdir -p "$LD_CONFIG_DIR"
 
-# The minimal structural gate. The UNIVERSAL core (owner.name non-blank,
-# calendar.sources a non-empty array, no blank source account, no leftover
-# [UPPER_SNAKE] placeholder) is single-homed in the shared ld-shared gate
-# (plow-pbc/life-dashboard-skills :: scripts/ld_config_gate.py), materialized
-# under ref/team-skills/ld-shared/ by sync-ld-shared.sh (run in step 2b, before
-# this function is ever invoked). On top of the shared core this seed adds ONE
-# Plow-specific invariant — family.owner.imessage non-blank — because this seed
-# delivers via iMessage and its producers read owner.imessage (the Hermes seed
-# delivers via plow_chat, so the shared gate deliberately omits it). The gate
-# prints the failing invariant name(s) (never the PII values) to stdout, joined
-# by "; "; empty output == PASS. ref/verify.sh's v-ld-config delegates to the
-# SAME shared gate + the same local imessage check, so install + verify never
-# drift on the contract.
-LD_SHARED_GATE="$SEED_ROOT/ref/team-skills/ld-shared/scripts/ld_config_gate.py"
-[ -f "$LD_SHARED_GATE" ] || {
-  echo "shared ld-config gate not found at $LD_SHARED_GATE — sync-ld-shared.sh must run first" >&2
-  exit 1
-}
-ld_config_gate() {  # ld_config_gate FILE -> prints failures (empty == pass)
-  # Universal core: delegate to the shared gate (single source of truth).
-  local fails
-  fails=$(python3 "$LD_SHARED_GATE" "$1")
-  # When the file does not parse (or its shape would error the universal
-  # checks) the shared gate emits exactly "not valid JSON"; the imessage
-  # check is redundant then, so pass that sentinel through untouched.
-  if [ "$fails" != "not valid JSON" ] \
-     && [ "$(jq -r '(.family.owner.imessage // "") | test("\\S")' "$1" 2>/dev/null)" != "true" ]; then
-    # Plow-specific addition: owner.imessage must be non-blank (this seed's
-    # iMessage producers require it). jq is already a required tool here.
-    fails="${fails:+$fails; }family.owner.imessage is blank"
-  fi
-  printf '%s' "$fails"
-}
+# The minimal structural gate — universal core (shared ld-shared gate) plus this
+# seed's Plow-specific family.owner.imessage check, defined once in
+# ref/ld-config-gate.sh and sourced by BOTH this script and ref/verify.sh so the
+# contract is single-homed and install + verify never drift. ld-shared is
+# materialized by sync-ld-shared.sh (step 2b above) before the first invocation.
+. "$SEED_ROOT/ref/ld-config-gate.sh"
 
 # Assemble only when there is no config yet, OR the existing one fails
 # the gate (corrupted / never-completed). A gate-passing existing file
