@@ -46,6 +46,21 @@ function qualifyingEvent(now, overrides = {}) {
   };
 }
 
+// The run() fetch mock shared by the in-window tests: a qualifying calendar
+// event, then the owner-channel lookup (happy by default, overridable to
+// exercise resolution failures), then an empty 200 for the kiosk/send POSTs.
+// Records each call as { url, body } on `calls`.
+function fetchCalendarThenOwner({ now, calls, meResponse }) {
+  return async (url, init) => {
+    calls.push({ url, body: init && init.body });
+    if (url.includes("/calendar.events.list")) {
+      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+    }
+    if (url.includes("/v1/me/channels")) return meResponse ?? meChannelsResponse();
+    return { ok: true, async json() { return {}; } };
+  };
+}
+
 test("inNudgeWindow fires in [20,25) and [50,55) only", () => {
   for (const m of [20, 21, 24, 50, 51, 54]) assert.equal(inNudgeWindow(m), true, `minute ${m}`);
   for (const m of [0, 19, 25, 29, 30, 49, 55, 59]) assert.equal(inNudgeWindow(m), false, `minute ${m}`);
@@ -70,14 +85,7 @@ test("off-window tick gates out without fetching", async () => {
 test("in-window tick with a qualifying meeting posts kiosk + iMessage", async () => {
   const now = new Date("2026-05-22T22:20:00Z"); // 3:20pm PT → minute 20
   const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, body: init && init.body });
-    if (url.includes("/calendar.events.list")) {
-      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
-    }
-    if (url.includes("/v1/me/channels")) return meChannelsResponse();
-    return { ok: true, async json() { return {}; } };
-  };
+  const fetchImpl = fetchCalendarThenOwner({ now, calls });
   const res = await run({
     now,
     fetch: fetchImpl,
@@ -167,19 +175,12 @@ test("reads config + tokens from mounted /config paths (readFile seam)", async (
     return files[path];
   };
   const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push(url);
-    if (url.includes("/calendar.events.list")) {
-      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
-    }
-    if (url.includes("/v1/me/channels")) return meChannelsResponse();
-    return { ok: true, async json() { return {}; } };
-  };
+  const fetchImpl = fetchCalendarThenOwner({ now, calls });
   const res = await run({ now, fetch: fetchImpl, readFile });
   assert.equal(res.sent, true);
   assert.equal(res.count, 1);
-  assert.ok(calls.some((u) => u === "https://dash.test/api/message"));
-  assert.ok(calls.some((u) => u.includes("/channels/linq/send")));
+  assert.ok(calls.some((c) => c.url === "https://dash.test/api/message"));
+  assert.ok(calls.some((c) => c.url.includes("/channels/linq/send")));
 });
 
 test("missing family.timezone throws", async () => {
@@ -193,14 +194,7 @@ test("missing family.timezone throws", async () => {
 test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", async () => {
   const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
   const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, body: init && init.body });
-    if (url.includes("/calendar.events.list")) {
-      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
-    }
-    if (url.includes("/v1/me/channels")) return meChannelsResponse();
-    return { ok: true, async json() { return {}; } };
-  };
+  const fetchImpl = fetchCalendarThenOwner({ now, calls });
   const res = await run({
     now,
     fetch: fetchImpl,
@@ -226,14 +220,7 @@ for (const { name, meResponse, expected } of [
   test(`/v1/me/channels ${name} throws after kiosk posts, no send attempted`, async () => {
     const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
     const calls = [];
-    const fetchImpl = async (url) => {
-      calls.push(url);
-      if (url.includes("/calendar.events.list")) {
-        return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
-      }
-      if (url.includes("/v1/me/channels")) return meResponse;
-      return { ok: true, async json() { return {}; } };
-    };
+    const fetchImpl = fetchCalendarThenOwner({ now, calls, meResponse });
     await assert.rejects(
       () => run({
         now,
@@ -246,8 +233,8 @@ for (const { name, meResponse, expected } of [
       }),
       expected,
     );
-    assert.ok(calls.some((u) => u === "https://dash.test/api/message"), "kiosk posted before the throw");
-    assert.ok(!calls.some((u) => u.includes("/channels/linq/send")), "no send attempted without a handle");
+    assert.ok(calls.some((c) => c.url === "https://dash.test/api/message"), "kiosk posted before the throw");
+    assert.ok(!calls.some((c) => c.url.includes("/channels/linq/send")), "no send attempted without a handle");
   });
 }
 
