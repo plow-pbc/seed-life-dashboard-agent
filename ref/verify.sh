@@ -69,6 +69,10 @@ echo "OK   v-token-shape"
 # sourced gate fails loud with a "run install first" message rather than a bare
 # python file-not-found.
 . "$SEED_ROOT/ref/ld-config-gate.sh"
+# Surface a missing shared gate with the conventional FAIL v-<check>: prefix
+# (the sourced helper's own message lacks it), so the verify output stays
+# scan-consistent with every other check.
+[ -f "$LD_SHARED_GATE" ] || { echo "FAIL v-ld-config: shared ld-config gate not found at $LD_SHARED_GATE — ld-shared not synced; run install first" >&2; exit 1; }
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
 GATE=$(ld_config_gate "$LD_CONFIG")
