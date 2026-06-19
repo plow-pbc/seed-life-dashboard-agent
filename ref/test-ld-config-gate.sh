@@ -9,10 +9,6 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-# Pin the test to the synced copy: clear any dev/CI LD_SHARED_GATE override so a
-# developer with it exported can't read this contract test green against a
-# different gate than the one sync-ld-shared.sh materialized.
-unset LD_SHARED_GATE
 # shellcheck source=ref/ld-config-gate.sh
 . "$HERE/ld-config-gate.sh"
 

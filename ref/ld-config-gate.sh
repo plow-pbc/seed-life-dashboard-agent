@@ -23,7 +23,7 @@
 # Resolve the shared gate relative to THIS file (ref/) so install, verify, and
 # the test all locate the same materialized copy.
 LD_CONFIG_GATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-LD_SHARED_GATE="${LD_SHARED_GATE:-$LD_CONFIG_GATE_DIR/team-skills/ld-shared/scripts/ld_config_gate.py}"
+LD_SHARED_GATE="$LD_CONFIG_GATE_DIR/team-skills/ld-shared/scripts/ld_config_gate.py"
 
 ld_config_gate() {  # ld_config_gate FILE -> prints failures (empty == pass)
   [ -f "$LD_SHARED_GATE" ] || {
