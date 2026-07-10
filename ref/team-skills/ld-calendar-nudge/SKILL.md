@@ -344,12 +344,15 @@ Then:
    `/config/secrets/` paths the other ld- bundles use and posts the reminder
    to the kiosk as card 1 with `type: "alert"` (the slot shared with
    `ld-morning-triage` — the store keeps the latest post per card).
-   Fails loudly on any non-200 response — surface that and stop; do
-   not continue to the iMessage step on a failed kiosk post.
+   The kiosk is **best-effort**: the household screen is a Pi that is often
+   offline (unplugged, off-network while the family travels). On a non-200 or
+   an unreachable Pi, note the failure but **still continue to the iMessage
+   step** — the kiosk must never suppress the owner's reminder, which is the
+   surface that actually reaches them.
 
    Preview without sending: add `--dry-run` before the heredoc.
 
-2. **iMessage** — after the kiosk post succeeds, end the turn by
+2. **iMessage** — **regardless of the kiosk outcome**, end the turn by
    returning the same reminder text as the agent's final response. The
    plow-imessage channel delivers the final response to the owner's
    iMessage on a manual run; recurring delivery is `scheduled/run.js`'s

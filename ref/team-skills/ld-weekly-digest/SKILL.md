@@ -149,13 +149,15 @@ The digest is delivered on two surfaces, in this order:
    (Example delimiter — generate a fresh one.) The **quoted** delimiter keeps
    the digest as literal stdin data (never parsed as shell). The helper reads endpoint + token from the same
    `/config/secrets/` paths the other ld- bundles use and posts the digest to
-   the kiosk as card 4 with `type: "digest"`. Fails loudly on any non-200
-   response — surface that and stop; do not continue to the iMessage step on a
-   failed kiosk post.
+   the kiosk as card 4 with `type: "digest"`. The kiosk is **best-effort**: the
+   household screen is a Pi that is often offline (unplugged, off-network while
+   the family travels). On a non-200 or an unreachable Pi, note the failure but
+   **still continue to the iMessage step** — the kiosk must never suppress the
+   owner's digest, which is the surface that actually reaches them.
 
    Preview without sending: add `--dry-run` before the heredoc.
 
-2. **iMessage** — after the kiosk post succeeds, end the turn by
+2. **iMessage** — **regardless of the kiosk outcome**, end the turn by
    returning the same digest text as the agent's final response. The
    cron's `delivery.mode=announce, delivery.channel=plow-imessage`
    routes that response to the owner's iMessage, so the owner gets the
