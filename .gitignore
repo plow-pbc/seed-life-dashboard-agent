@@ -8,3 +8,7 @@ install-report.json
 # ld-shared is the shared contract layer pulled from plow-pbc/life-dashboard-skills
 # at install + test time (ref/sync-ld-shared.sh), never vendored here.
 ref/team-skills/ld-shared/
+# ld-runtime.js is copied into each scheduled-runner bundle by sync-ld-shared.sh
+# so the runner is self-contained on the isolated /scheduled/<slug>/ mount; the
+# single source of truth lives in ld-shared, never committed per-bundle.
+ref/team-skills/*/scheduled/ld-runtime.js
