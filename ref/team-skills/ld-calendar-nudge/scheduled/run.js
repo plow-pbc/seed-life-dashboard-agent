@@ -184,14 +184,19 @@ async function run(opts = {}) {
   const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
   const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
 
-  // Kiosk first; on a failed kiosk post, surface and stop (don't iMessage).
-  // Resolve the owner handle only after the kiosk reminder is up, so a
-  // /v1/me/channels hiccup degrades the iMessage leg without suppressing the
-  // glanceable surface.
+  // Kiosk is best-effort: the glanceable shared screen is a household Pi that
+  // can be offline (unplugged, off-network while the family travels) — that must
+  // never suppress the owner's iMessage, which is the reminder that actually
+  // reaches them. Log a failed kiosk post and continue to the send. iMessage is
+  // the surface that must not fail silently, so its errors still propagate.
   // Card 1 / type "alert" — calendar reminders share the alert slot with
-  // ld-morning-triage (the store is latest-per-card, so the newest wins).
+  // ld-morning-triage (the store is latest-per-card, so the newest wins);
   // title:"" hides the card's eyebrow so the alert text gets the full height.
-  await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "1", type: "alert", title: "" });
+  try {
+    await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "1", type: "alert", title: "" });
+  } catch (err) {
+    log("kiosk_post_failed", { error: String((err && err.message) || err) });
+  }
   const ownerHandle = await fetchOwnerHandle(fetchImpl, apiUrl, apiToken);
   await postImessage(fetchImpl, apiUrl, apiToken, ownerHandle, text);
   log("nudge_sent", { count: qualifying.length });

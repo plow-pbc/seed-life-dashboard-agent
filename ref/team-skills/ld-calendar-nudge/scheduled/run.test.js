@@ -119,6 +119,38 @@ test("in-window tick with a qualifying meeting posts kiosk + iMessage", async ()
   assert.ok(!("to" in sendBody), "the dead to:'owner' sentinel must not be sent");
 });
 
+// Regression: the household Pi is offline (fetch throws, or 5xx) — the owner's
+// iMessage reminder MUST still go out. Before the kiosk was made best-effort, a
+// failed kiosk POST aborted the run and the owner silently got nothing.
+test("kiosk POST failure (offline Pi) does not suppress the owner iMessage", async () => {
+  const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
+  for (const kioskOutcome of [
+    () => { throw new TypeError("fetch failed"); },                    // Pi unreachable (UND_ERR_CONNECT_TIMEOUT)
+    () => ({ ok: false, status: 503, async json() { return {}; } }),  // Pi up but erroring
+  ]) {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, body: init && init.body });
+      if (url.includes("/calendar.events.list")) {
+        return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
+      }
+      if (url.includes("/v1/me/channels")) return meChannelsResponse();
+      if (url === "https://dash.test/api/message") return kioskOutcome();
+      return { ok: true, async json() { return {}; } };
+    };
+    const res = await run({
+      now, fetch: fetchImpl, config: baseConfig(),
+      apiUrl: "https://api.test", apiToken: "tok",
+      dashUrl: "https://dash.test/api/message", dashToken: "dtok",
+    });
+    assert.equal(res.sent, true, "owner reminder sent despite kiosk failure");
+    assert.equal(res.count, 1);
+    const send = calls.find((c) => c.url.includes("/channels/linq/send"));
+    assert.ok(send, "iMessage send happened");
+    assert.equal(JSON.parse(send.body).thread_handle, OWNER_HANDLE);
+  }
+});
+
 // In-window but nothing qualifies → silent, no kiosk/iMessage.
 test("in-window tick with no qualifying meeting is silent", async () => {
   const now = new Date("2026-05-22T22:50:00Z"); // minute 50, in-window
@@ -238,27 +270,25 @@ for (const { name, meResponse, expected } of [
   });
 }
 
-test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
+// A non-http(s) kiosk URL trips postKiosk's token-leak guard (never forward the
+// bearer to a non-http target) — but the kiosk is best-effort, so a misconfigured
+// URL is logged-and-skipped for the kiosk, never POSTed to, and the owner's
+// iMessage reminder still goes out.
+test("non-http(s) kiosk URL is skipped (bearer never sent), iMessage still delivered", async () => {
   const now = new Date("2026-05-22T22:20:00Z"); // minute 20, in-window
-  const fetchImpl = async (url) => {
-    if (url.includes("/calendar.events.list")) {
-      return { ok: true, async json() { return { data: { items: [qualifyingEvent(now)] } }; } };
-    }
-    return { ok: true, async json() { return {}; } };
-  };
   for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
-    await assert.rejects(
-      run({
-        now,
-        fetch: fetchImpl,
-        config: baseConfig(),
-        apiUrl: "https://api.test",
-        apiToken: "tok",
-        dashUrl: badUrl,
-        dashToken: "dtok",
-      }),
-      /must be http\(s\):\/\//,
-      `expected rejection for ${badUrl}`,
-    );
+    const calls = [];
+    const res = await run({
+      now,
+      fetch: fetchCalendarThenOwner({ now, calls }),
+      config: baseConfig(),
+      apiUrl: "https://api.test",
+      apiToken: "tok",
+      dashUrl: badUrl,
+      dashToken: "dtok",
+    });
+    assert.equal(res.sent, true, `owner reminder still sent for ${badUrl}`);
+    assert.ok(!calls.some((c) => c.url === badUrl), `bearer never POSTed to ${badUrl}`);
+    assert.ok(calls.some((c) => c.url.includes("/channels/linq/send")), `iMessage send happened for ${badUrl}`);
   }
 });
