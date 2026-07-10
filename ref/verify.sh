@@ -8,6 +8,7 @@ APP_SUPPORT="$HOME/Library/Application Support/$PLOW_BUNDLE_ID"
 SECRETS_DIR="$APP_SUPPORT/agent-runtime/secrets"
 CONTAINERS_DIR="$APP_SUPPORT/containers"
 LD_CONFIG="$APP_SUPPORT/agent-runtime/runtime/ld/config.json"
+SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
 # v1: dashboard-endpoint-url and dashboard-token present, mode 600, non-empty.
 for s in dashboard-endpoint-url dashboard-token; do
@@ -42,33 +43,39 @@ fi
 echo "OK   v-token-shape"
 
 # v1b: ld-config present + parses as JSON + passes the minimal
-# structural gate. This is the SAME gate install-bundles.sh enforces
-# pre-mutation (SEED.md ## Actions > minimal structural gate), so
-# install and verify can never drift. The gate is deliberately MINIMAL
+# structural gate. This delegates to the EXACT SAME gate install-bundles.sh
+# enforces pre-mutation: the universal core is the shared ld-shared gate
+# (plow-pbc/life-dashboard-skills :: scripts/ld_config_gate.py, materialized
+# under ref/team-skills/ld-shared/ by sync-ld-shared.sh), plus the one Plow-
+# specific local check (family.owner.imessage non-blank). Routing both
+# install and verify through the same shared gate + same local check means
+# they can never drift on the contract. The gate is deliberately MINIMAL
 # — it does NOT mirror run.js's per-field runtime requirements (those
 # are the bundles' single source of truth) — it asserts only the
 # invariants that separate a USABLE filled config from an unedited
 # template or a blank-filled one:
-#   - family.owner.{name,imessage} present and non-blank
-#   - calendar.sources a non-empty array, each source's account non-blank
-#   - no string value left as a bare [UPPER_SNAKE] placeholder
+#   - family.owner.name present and non-blank        (shared core)
+#   - calendar.sources a non-empty array, each source's account non-blank (shared core)
+#   - no string value left as a bare [UPPER_SNAKE] placeholder (shared core)
+#   - family.owner.imessage present and non-blank     (Plow-specific local check)
 # The autodetected timezone is NOT re-checked: a preserved / operator-
 # edited config may legitimately carry a non-host zone (laptop moved,
 # remote household), so enforcing it here would falsely reject a valid
 # config. PII never prints — only the failing invariant's name.
+# Same gate install-bundles.sh enforces, defined once in ref/ld-config-gate.sh
+# (universal core via the shared ld-shared gate + the local imessage check) and
+# sourced by both — so install and verify can never drift. ld-shared is
+# materialized at install; verify runs post-install. If ld-shared is missing the
+# sourced gate fails loud with a "run install first" message rather than a bare
+# python file-not-found.
+. "$SEED_ROOT/ref/ld-config-gate.sh"
+# Surface a missing shared gate with the conventional FAIL v-<check>: prefix
+# (the sourced helper's own message lacks it), so the verify output stays
+# scan-consistent with every other check.
+[ -f "$LD_SHARED_GATE" ] || { echo "FAIL v-ld-config: shared ld-config gate not found at $LD_SHARED_GATE — ld-shared not synced; run install first" >&2; exit 1; }
 [ -f "$LD_CONFIG" ] || { echo "FAIL v-ld-config: $LD_CONFIG missing" >&2; exit 1; }
 jq -e . "$LD_CONFIG" >/dev/null || { echo "FAIL v-ld-config: $LD_CONFIG is not valid JSON" >&2; exit 1; }
-GATE=$(jq -r '
-  [ if ((.family.owner.name    // "") | test("\\S")) then empty else "family.owner.name is blank" end,
-    if ((.family.owner.imessage // "") | test("\\S")) then empty else "family.owner.imessage is blank" end,
-    if ((.calendar.sources | type) == "array" and (.calendar.sources | length) >= 1)
-      then empty else "calendar.sources is not a non-empty array" end,
-    if ([.calendar.sources[]? | select(((.account // "") | test("\\S")) | not)] | length) == 0
-      then empty else "a calendar.sources[].account is blank" end,
-    if ([.. | strings | select(test("^\\[[A-Z][A-Z0-9_]*\\]$"))] | length) == 0
-      then empty else "an unfilled [UPPER_SNAKE] placeholder remains" end
-  ] | join("; ")
-' "$LD_CONFIG")
+GATE=$(ld_config_gate "$LD_CONFIG")
 if [ -n "$GATE" ]; then
   echo "FAIL v-ld-config: $LD_CONFIG does not pass the install gate: $GATE" >&2
   echo "Fix the config (or re-run install with the LD_OWNER_* / LD_CALENDAR_ACCOUNT inputs set) before verifying." >&2
@@ -77,9 +84,13 @@ fi
 echo "OK   v-ld-config"
 
 # Each ld-* bundle's distinctive file. ld-shared is a helper module (no
-# SKILL.md); the other seven are full skills with SKILL.md.
+# SKILL.md) carrying BOTH shared helpers the producers load: the Python
+# post_to_kiosk (wrapper POST path) and the JS ld-runtime (scheduled runners
+# require it at module load) — probe both so a stale/partial ld-shared fails
+# the gate here instead of crashing the runners at their first tick.
 declare -a probes=(
   "ld-shared/scripts/post_to_kiosk.py"
+  "ld-shared/scripts/ld-runtime.js"
   "ld-calendar-nudge/SKILL.md"
   "ld-morning-triage/SKILL.md"
   "ld-morning-updates/SKILL.md"
@@ -118,7 +129,6 @@ echo "OK   v-bundles ($WORKSPACE_SKILLS)"
 # wrapper code that's installed inside the VM, just executed from the
 # host with rebound module-level constants. This proves the secrets
 # resolve and the wrapper executes; it does NOT post over the network.
-SEED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 DRY_OUT=$(mktemp -t agent-verify-out)
 trap 'rm -f "$DRY_OUT"' EXIT
 # Capture the dry-run's exit status explicitly (no `|| true`): a hard

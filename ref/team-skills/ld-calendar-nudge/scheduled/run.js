@@ -31,12 +31,18 @@ const fs = require("node:fs/promises");
 
 const { qualifyingEvents } = require("./filter.js");
 const { composeReminder } = require("./compose.js");
+const {
+  minuteInTz,
+  readTrimmed,
+  postKiosk,
+  LD_CONFIG_PATH,
+  DASH_URL_PATH,
+  DASH_TOKEN_PATH,
+} = require("../../ld-shared/scripts/ld-runtime.js");
 
-const LD_CONFIG_PATH = "/config/runtime/ld/config.json";
+// Calendar-only paths — only this producer calls the Plow API.
 const API_URL_PATH = "/config/gateway/plow-api-url";
 const API_TOKEN_PATH = "/config/secrets/plow-api-token";
-const DASH_URL_PATH = "/config/secrets/dashboard-endpoint-url";
-const DASH_TOKEN_PATH = "/config/secrets/dashboard-token";
 
 function log(message, fields) {
   try {
@@ -46,28 +52,12 @@ function log(message, fields) {
   }
 }
 
-// Wall-clock minute (0-59) in `tz`. Used by the self-gate; computed in the
-// family timezone so the :20/:50 cadence is correct even on a UTC gateway.
-function minuteInTz(now, tz) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour12: false,
-    minute: "2-digit",
-  }).formatToParts(now);
-  const m = parts.find((p) => p.type === "minute");
-  return m ? parseInt(m.value, 10) : now.getMinutes();
-}
-
 // True only in the [20,25) / [50,55) windows — one 5-min slot per half hour.
 // `minute % 30` folds :20 and :50 to the same 20-29 band; [20,25) is the
 // nudge slot. Exported for tests.
 function inNudgeWindow(minute) {
   const slot = minute % 30;
   return slot >= 20 && slot < 25;
-}
-
-async function readTrimmed(readFile, path) {
-  return (await readFile(path, "utf8")).trim();
 }
 
 async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax) {
@@ -98,25 +88,6 @@ async function fetchEvents(fetchImpl, apiUrl, apiToken, source, timeMin, timeMax
     throw new Error(`calendar.events.list malformed response${label}`);
   }
   return items;
-}
-
-async function postKiosk(fetchImpl, dashUrl, dashToken, text) {
-  // The Pi backend rides the household LAN/tailnet, not the public internet —
-  // http:// is an accepted trade-off for that trust zone.
-  if (!dashUrl.startsWith("http://") && !dashUrl.startsWith("https://")) {
-    throw new Error("kiosk POST: dashboard URL must be http(s)://");
-  }
-  const resp = await fetchImpl(dashUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${dashToken}`, "Content-Type": "application/json" },
-    redirect: "error", // never forward the bearer to a 3xx target
-    // Card 1 / type "alert" — calendar reminders share the alert slot with
-    // ld-morning-triage (the store is latest-per-card, so the newest wins).
-    // title:"" hides the card's eyebrow so the alert text gets the full height
-    // (matches ld-morning-triage, which also posts the alert title-less).
-    body: JSON.stringify({ card: "1", type: "alert", text, title: "" }),
-  });
-  if (!resp.ok) throw new Error(`kiosk POST ${resp.status}`);
 }
 
 // Resolve the owner's own LinQ handle for owner-self delivery. The send API
@@ -218,8 +189,11 @@ async function run(opts = {}) {
   // never suppress the owner's iMessage, which is the reminder that actually
   // reaches them. Log a failed kiosk post and continue to the send. iMessage is
   // the surface that must not fail silently, so its errors still propagate.
+  // Card 1 / type "alert" — calendar reminders share the alert slot with
+  // ld-morning-triage (the store is latest-per-card, so the newest wins);
+  // title:"" hides the card's eyebrow so the alert text gets the full height.
   try {
-    await postKiosk(fetchImpl, dashUrl, dashToken, text);
+    await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "1", type: "alert", title: "" });
   } catch (err) {
     log("kiosk_post_failed", { error: String((err && err.message) || err) });
   }

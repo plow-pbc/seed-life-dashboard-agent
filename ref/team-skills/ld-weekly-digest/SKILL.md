@@ -149,20 +149,22 @@ The digest is delivered on two surfaces, in this order:
    (Example delimiter — generate a fresh one.) The **quoted** delimiter keeps
    the digest as literal stdin data (never parsed as shell). The helper reads endpoint + token from the same
    `/config/secrets/` paths the other ld- bundles use and posts the digest to
-   the kiosk as card 4 with `type: "digest"`. The kiosk is **best-effort**: the
-   household screen is a Pi that is often offline (unplugged, off-network while
-   the family travels). On a non-200 or an unreachable Pi, note the failure but
-   **still continue to the iMessage step** — the kiosk must never suppress the
-   owner's digest, which is the surface that actually reaches them.
+   the kiosk as card 4 with `type: "digest"`. The kiosk is a best-effort
+   *secondary* surface: if the helper exits non-zero (an unreachable Pi or a
+   non-200 response), prepend the fixed line
+   `⚠️ Kiosk offline — dashboard not updated` but **do not stop** — still
+   deliver via iMessage below. A brief tailnet outage must never suppress the
+   digest.
 
    Preview without sending: add `--dry-run` before the heredoc.
 
-2. **iMessage** — **regardless of the kiosk outcome**, end the turn by
-   returning the same digest text as the agent's final response. The
-   cron's `delivery.mode=announce, delivery.channel=plow-imessage`
-   routes that response to the owner's iMessage, so the owner gets the
-   same digest on both surfaces (kiosk glanceable, iMessage for
-   reading later). The duplicate is deliberate.
+2. **iMessage** — **always**, whether or not the kiosk post succeeded, end
+   the turn by returning the same digest text as the agent's final response.
+   The cron's `delivery.mode=announce, delivery.channel=plow-imessage`
+   routes that response to the owner's iMessage — the reliable channel — so
+   the owner gets the digest even when the kiosk is down (kiosk glanceable
+   when up, iMessage for reading later). When both land the duplicate is
+   deliberate.
 
 When invoked directly in chat (no cron), the kiosk step is skipped —
 just return the digest in the reply.

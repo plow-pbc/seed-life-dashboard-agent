@@ -123,22 +123,12 @@ unset DASHBOARD_ENDPOINT_URL DASHBOARD_TOKEN
 #    and the operator instructions all agree on it.
 mkdir -p "$LD_CONFIG_DIR"
 
-# The minimal structural gate, inline. Prints the failing invariant(s)
-# (never the PII values) to stdout; empty output == PASS. Same checks
-# ref/verify.sh's v-ld-config enforces, so install + verify never drift.
-ld_config_gate() {  # ld_config_gate FILE -> prints failures (empty == pass)
-  jq -r '
-    [ if ((.family.owner.name     // "") | test("\\S")) then empty else "family.owner.name is blank" end,
-      if ((.family.owner.imessage // "") | test("\\S")) then empty else "family.owner.imessage is blank" end,
-      if ((.calendar.sources | type) == "array" and (.calendar.sources | length) >= 1)
-        then empty else "calendar.sources is not a non-empty array" end,
-      if ([.calendar.sources[]? | select(((.account // "") | test("\\S")) | not)] | length) == 0
-        then empty else "a calendar.sources[].account is blank" end,
-      if ([.. | strings | select(test("^\\[[A-Z][A-Z0-9_]*\\]$"))] | length) == 0
-        then empty else "an unfilled [UPPER_SNAKE] placeholder remains" end
-    ] | join("; ")
-  ' "$1" 2>/dev/null || echo "not valid JSON"
-}
+# The minimal structural gate — universal core (shared ld-shared gate) plus this
+# seed's Plow-specific family.owner.imessage check, defined once in
+# ref/ld-config-gate.sh and sourced by BOTH this script and ref/verify.sh so the
+# contract is single-homed and install + verify never drift. ld-shared is
+# materialized by sync-ld-shared.sh (step 2b above) before the first invocation.
+. "$SEED_ROOT/ref/ld-config-gate.sh"
 
 # Assemble only when there is no config yet, OR the existing one fails
 # the gate (corrupted / never-completed). A gate-passing existing file
