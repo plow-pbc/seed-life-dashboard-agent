@@ -38,7 +38,7 @@ const {
   LD_CONFIG_PATH,
   DASH_URL_PATH,
   DASH_TOKEN_PATH,
-} = require("../../ld-shared/scripts/ld-runtime.js");
+} = require("./ld-runtime.js");
 
 // Calendar-only paths — only this producer calls the Plow API.
 const API_URL_PATH = "/config/gateway/plow-api-url";

@@ -34,7 +34,7 @@ const {
   LD_CONFIG_PATH,
   DASH_URL_PATH,
   DASH_TOKEN_PATH,
-} = require("../../ld-shared/scripts/ld-runtime.js");
+} = require("./ld-runtime.js");
 
 // NWS requires a User-Agent identifying the caller (with contact) or returns
 // 403. Use the repo URL as the contact — no PII.

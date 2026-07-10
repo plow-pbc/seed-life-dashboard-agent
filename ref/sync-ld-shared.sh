@@ -49,3 +49,16 @@ rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -R "$TMP/scripts" "$TMP/references" "$DEST/"
 echo "sync-ld-shared: materialized ld-shared from $REPO@$REF" >&2
+
+# Copy the JS runtime helpers into each scheduled-runner bundle so it is
+# self-contained at deploy. plow-scheduled-runner installs each bundle's
+# scheduled/ dir in isolation under /scheduled/<slug>/, where a cross-bundle
+# require ("../../ld-shared/...") can't resolve — the sibling ld-shared bundle
+# is never placed on that mount. Single source of truth stays in ld-shared;
+# each runner requires the local ./ld-runtime.js copy landed here.
+TEAM_SKILLS="$(dirname "$DEST")"
+for sched in "$TEAM_SKILLS"/*/scheduled; do
+  [ -d "$sched" ] || continue
+  cp "$DEST/scripts/ld-runtime.js" "$sched/ld-runtime.js"
+done
+echo "sync-ld-shared: landed ld-runtime.js into each scheduled-runner bundle" >&2

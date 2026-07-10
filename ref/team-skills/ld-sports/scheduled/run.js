@@ -32,7 +32,7 @@ const {
   LD_CONFIG_PATH,
   DASH_URL_PATH,
   DASH_TOKEN_PATH,
-} = require("../../ld-shared/scripts/ld-runtime.js");
+} = require("./ld-runtime.js");
 
 // Pin every scoreboard GET to the ESPN public host so a malformed/compromised
 // response can't steer an outbound GET elsewhere. Combined with redirect:"error"
