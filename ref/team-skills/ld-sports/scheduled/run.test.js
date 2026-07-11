@@ -183,10 +183,9 @@ test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", asyn
 
 test("run fails loud for invalid runtime inputs", async () => {
   const inWindow = new Date("2026-06-09T22:00:00Z");
+  // Genuine config errors still fail loud (kiosk failures no longer do — see the
+  // best-effort test below).
   const cases = [
-    { name: "non-http(s) dashboard URL", config: baseConfig(), fetch: fakeFetch(), dashUrl: "ftp://kiosk.example/api/message", error: /must be http\(s\):\/\// },
-    { name: "garbage dashboard URL", config: baseConfig(), fetch: fakeFetch(), dashUrl: "notaurl", error: /must be http\(s\):\/\// },
-    { name: "kiosk 502", config: baseConfig(), fetch: fakeFetch({ kioskOk: false }), dashUrl: "https://kiosk.example/api/message", error: /kiosk POST 502/ },
     { name: "missing family.timezone", config: { sports: baseConfig().sports }, fetch: fakeFetch(), dashUrl: "https://kiosk.example/api/message", error: /timezone/ },
     { name: "missing sports.followed", config: baseConfig({ sports: {} }), fetch: fakeFetch(), dashUrl: "https://kiosk.example/api/message", error: /sports\.followed/ },
   ];
@@ -196,5 +195,18 @@ test("run fails loud for invalid runtime inputs", async () => {
       c.error,
       `expected rejection for ${c.name}`,
     );
+  }
+});
+
+// Kiosk is best-effort now (postKioskCard): a bad URL / offline Pi / 5xx logs and
+// returns posted:false rather than crashing the scheduled runner.
+test("kiosk failure is best-effort — posted:false, never throws", async () => {
+  const inWindow = new Date("2026-06-09T22:00:00Z");
+  for (const c of [
+    { dashUrl: "ftp://kiosk.example/api/message", fetch: fakeFetch() },     // bad scheme (no bearer sent)
+    { dashUrl: "https://kiosk.example/api/message", fetch: fakeFetch({ kioskOk: false }) }, // 5xx
+  ]) {
+    const res = await run({ now: inWindow, config: baseConfig(), fetch: c.fetch, dashUrl: c.dashUrl, dashToken: "tok" });
+    assert.equal(res.posted, false);
   }
 });

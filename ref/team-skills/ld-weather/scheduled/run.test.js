@@ -129,33 +129,19 @@ test("http:// kiosk URL is accepted (Pi backend on household LAN/tailnet)", asyn
   assert.equal(res.posted, true);
 });
 
-test("non-http(s) kiosk URL is refused (ftp:// and garbage)", async () => {
-  for (const badUrl of ["ftp://kiosk.example/api/message", "notaurl"]) {
-    await assert.rejects(
-      run({
-        now: new Date("2026-06-09T22:00:00Z"),
-        config: baseConfig(),
-        fetch: fakeFetch(),
-        dashUrl: badUrl,
-        dashToken: "tok",
-      }),
-      /must be http\(s\):\/\//,
-      `expected rejection for ${badUrl}`,
-    );
+// Kiosk is best-effort now (postKioskCard): a bad URL / offline Pi / 5xx logs and
+// returns posted:false rather than crashing the scheduled runner.
+test("kiosk failures are best-effort — posted:false, never throws", async () => {
+  const inWindow = new Date("2026-06-09T22:00:00Z");
+  for (const c of [
+    { name: "bad scheme (no bearer sent)", dashUrl: "ftp://kiosk.example/api/message", fetch: fakeFetch() },
+    { name: "garbage URL", dashUrl: "notaurl", fetch: fakeFetch() },
+    { name: "5xx", dashUrl: "https://kiosk.example/api/message", fetch: fakeFetch({ kioskOk: false }) },
+  ]) {
+    const res = await run({ now: inWindow, config: baseConfig(), fetch: c.fetch, dashUrl: c.dashUrl, dashToken: "tok" });
+    assert.equal(res.posted, false, c.name);
+    assert.ok(typeof res.text === "string" && res.text.length > 0, c.name);
   }
-});
-
-test("a failed kiosk POST surfaces loudly", async () => {
-  await assert.rejects(
-    run({
-      now: new Date("2026-06-09T22:00:00Z"),
-      config: baseConfig(),
-      fetch: fakeFetch({ kioskOk: false }),
-      dashUrl: "https://kiosk.example/api/message",
-      dashToken: "tok",
-    }),
-    /kiosk POST 502/,
-  );
 });
 
 test("missing family.timezone fails loud", async () => {

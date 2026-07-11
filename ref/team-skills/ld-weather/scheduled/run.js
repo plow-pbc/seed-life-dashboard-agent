@@ -29,11 +29,9 @@ const fs = require("node:fs/promises");
 const { composeWeather } = require("./compose.js");
 const {
   minuteInTz,
-  readTrimmed,
-  postKiosk,
-  LD_CONFIG_PATH,
-  DASH_URL_PATH,
-  DASH_TOKEN_PATH,
+  makeLog,
+  loadLdConfig,
+  postKioskCard,
 } = require("./ld-runtime.js");
 
 // NWS requires a User-Agent identifying the caller (with contact) or returns
@@ -47,13 +45,7 @@ const NWS_USER_AGENT =
 // the runner only ever talks to api.weather.gov.
 const NWS_BASE = "https://api.weather.gov/";
 
-function log(message, fields) {
-  try {
-    console.error(`[ld-weather] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-weather] ${message}`);
-  }
-}
+const log = makeLog("ld-weather");
 
 // True only in the [0,5) window — one 5-min runner tick per hour. Exported
 // for tests.
@@ -98,11 +90,7 @@ async function run(opts = {}) {
   const fetchImpl = opts.fetch ?? globalThis.fetch;
   const readFile = opts.readFile ?? fs.readFile;
 
-  const config = opts.config ?? JSON.parse(await readFile(LD_CONFIG_PATH, "utf8"));
-  const timezone = config?.family?.timezone;
-  if (typeof timezone !== "string" || timezone.length === 0) {
-    throw new Error("ld-weather: family.timezone missing in /config/runtime/ld/config.json");
-  }
+  const { config, timezone } = await loadLdConfig(readFile, opts);
 
   // Self-gate: one run per hour. Manual runs (--force/--dry-run) bypass it.
   if (!opts.force && !opts.dryRun && !inWeatherWindow(minuteInTz(now, timezone))) {
@@ -129,11 +117,10 @@ async function run(opts = {}) {
     return { dryRun: true, text };
   }
 
-  const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
-  const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "3", type: "weather" });
-  log("weather_posted"); // body-free — the card text carries household location
-  return { posted: true, text };
+  // Best-effort kiosk post: an offline Pi logs + returns false, never crashes the runner.
+  const posted = await postKioskCard(fetchImpl, readFile, text, { card: "3", type: "weather" }, log, opts);
+  if (posted) log("weather_posted"); // body-free — the card text carries household location (a failed post is logged by postKioskCard)
+  return { posted, text };
 }
 
 module.exports = { run, inWeatherWindow };
