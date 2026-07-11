@@ -29,9 +29,9 @@ expect() {
   fi
 }
 
-VALID='{"family":{"owner":{"name":"Sam","imessage":"sam@example.com"}},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
-BLANK_IM='{"family":{"owner":{"name":"Sam","imessage":"   "}},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
-PLACEHOLDER_AND_BLANK_IM='{"family":{"owner":{"name":"[OWNER_NAME]","imessage":""}},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
+VALID='{"family":{"owner":{"name":"Sam","imessage":"sam@example.com"},"timezone":"America/Los_Angeles"},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
+BLANK_IM='{"family":{"owner":{"name":"Sam","imessage":"   "},"timezone":"America/Los_Angeles"},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
+PLACEHOLDER_AND_BLANK_IM='{"family":{"owner":{"name":"[OWNER_NAME]","imessage":""},"timezone":"America/Los_Angeles"},"calendar":{"sources":[{"account":"a@b.com","calendar_id":"primary"}]}}'
 # Mixed calendar.sources array (object + bare string) — the shape the old inline
 # jq filter errored on and SILENTLY treated as passing; the shared python gate
 # correctly maps it to the sentinel.
