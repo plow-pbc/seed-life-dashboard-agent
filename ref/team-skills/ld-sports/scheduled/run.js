@@ -27,11 +27,9 @@ const { parseGameFor } = require("./parse.js");
 const { composeSports } = require("./compose.js");
 const {
   minuteInTz,
-  readTrimmed,
-  postKiosk,
-  LD_CONFIG_PATH,
-  DASH_URL_PATH,
-  DASH_TOKEN_PATH,
+  makeLog,
+  loadLdConfig,
+  postKioskCard,
 } = require("./ld-runtime.js");
 
 // Pin every scoreboard GET to the ESPN public host so a malformed/compromised
@@ -39,13 +37,7 @@ const {
 // the runner only ever talks to site.api.espn.com.
 const ESPN_BASE = "https://site.api.espn.com/";
 
-function log(message, fields) {
-  try {
-    console.error(`[ld-sports] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-sports] ${message}`);
-  }
-}
+const log = makeLog("ld-sports");
 
 // True in the first 5 minutes of each quarter hour — one 5-min runner tick per
 // 15 min. Exported for tests.
@@ -70,11 +62,7 @@ async function run(opts = {}) {
   const fetchImpl = opts.fetch ?? globalThis.fetch;
   const readFile = opts.readFile ?? fs.readFile;
 
-  const config = opts.config ?? JSON.parse(await readFile(LD_CONFIG_PATH, "utf8"));
-  const timezone = config?.family?.timezone;
-  if (typeof timezone !== "string" || timezone.length === 0) {
-    throw new Error("ld-sports: family.timezone missing in /config/runtime/ld/config.json");
-  }
+  const { config, timezone } = await loadLdConfig(readFile, opts);
 
   // Self-gate: one run per quarter hour. Manual runs (--force/--dry-run) bypass.
   if (!opts.force && !opts.dryRun && !inSportsWindow(minuteInTz(now, timezone))) {
@@ -110,11 +98,10 @@ async function run(opts = {}) {
     return { dryRun: true, text };
   }
 
-  const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
-  const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-  await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "5", type: "sports" });
-  log("sports_posted", { games: games.length });
-  return { posted: true, text };
+  // Best-effort kiosk post: an offline Pi logs + returns false, never crashes the runner.
+  const posted = await postKioskCard(fetchImpl, readFile, text, { card: "5", type: "sports" }, log, opts);
+  log(posted ? "sports_posted" : "kiosk_offline", { games: games.length });
+  return { posted, text };
 }
 
 module.exports = { run, inSportsWindow };

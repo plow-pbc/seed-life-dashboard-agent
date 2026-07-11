@@ -34,23 +34,16 @@ const { composeReminder } = require("./compose.js");
 const {
   minuteInTz,
   readTrimmed,
-  postKiosk,
-  LD_CONFIG_PATH,
-  DASH_URL_PATH,
-  DASH_TOKEN_PATH,
+  makeLog,
+  loadLdConfig,
+  postKioskCard,
 } = require("./ld-runtime.js");
 
 // Calendar-only paths — only this producer calls the Plow API.
 const API_URL_PATH = "/config/gateway/plow-api-url";
 const API_TOKEN_PATH = "/config/secrets/plow-api-token";
 
-function log(message, fields) {
-  try {
-    console.error(`[ld-calendar-nudge] ${message}${fields ? " " + JSON.stringify(fields) : ""}`);
-  } catch {
-    console.error(`[ld-calendar-nudge] ${message}`);
-  }
-}
+const log = makeLog("ld-calendar-nudge");
 
 // True only in the [20,25) / [50,55) windows — one 5-min slot per half hour.
 // `minute % 30` folds :20 and :50 to the same 20-29 band; [20,25) is the
@@ -129,11 +122,7 @@ async function run(opts = {}) {
   const fetchImpl = opts.fetch ?? globalThis.fetch;
   const readFile = opts.readFile ?? fs.readFile;
 
-  const config = opts.config ?? JSON.parse(await readFile(LD_CONFIG_PATH, "utf8"));
-  const timezone = config?.family?.timezone;
-  if (typeof timezone !== "string" || timezone.length === 0) {
-    throw new Error("ld-calendar-nudge: family.timezone missing in /config/runtime/ld/config.json");
-  }
+  const { config, timezone } = await loadLdConfig(readFile, opts);
 
   // Self-gate: only one tick per half hour does real work.
   if (!inNudgeWindow(minuteInTz(now, timezone))) {
@@ -181,22 +170,14 @@ async function run(opts = {}) {
   }
 
   const text = composeReminder(qualifying, { timezone });
-  const dashUrl = opts.dashUrl ?? (await readTrimmed(readFile, DASH_URL_PATH));
-  const dashToken = opts.dashToken ?? (await readTrimmed(readFile, DASH_TOKEN_PATH));
-
-  // Kiosk is best-effort: the glanceable shared screen is a household Pi that
-  // can be offline (unplugged, off-network while the family travels) — that must
-  // never suppress the owner's iMessage, which is the reminder that actually
-  // reaches them. Log a failed kiosk post and continue to the send. iMessage is
-  // the surface that must not fail silently, so its errors still propagate.
+  // Kiosk is best-effort (postKioskCard logs + returns false on an offline Pi
+  // rather than throwing): the glanceable shared screen must never suppress the
+  // owner's iMessage, which is the reminder that actually reaches them. iMessage
+  // is the surface that must not fail silently, so its errors still propagate.
   // Card 1 / type "alert" — calendar reminders share the alert slot with
   // ld-morning-triage (the store is latest-per-card, so the newest wins);
   // title:"" hides the card's eyebrow so the alert text gets the full height.
-  try {
-    await postKiosk(fetchImpl, dashUrl, dashToken, text, { card: "1", type: "alert", title: "" });
-  } catch (err) {
-    log("kiosk_post_failed", { error: String((err && err.message) || err) });
-  }
+  await postKioskCard(fetchImpl, readFile, text, { card: "1", type: "alert", title: "" }, log, opts);
   const ownerHandle = await fetchOwnerHandle(fetchImpl, apiUrl, apiToken);
   await postImessage(fetchImpl, apiUrl, apiToken, ownerHandle, text);
   log("nudge_sent", { count: qualifying.length });
