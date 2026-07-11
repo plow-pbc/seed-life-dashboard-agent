@@ -100,7 +100,7 @@ async function run(opts = {}) {
 
   // Best-effort kiosk post: an offline Pi logs + returns false, never crashes the runner.
   const posted = await postKioskCard(fetchImpl, readFile, text, { card: "5", type: "sports" }, log, opts);
-  log(posted ? "sports_posted" : "kiosk_offline", { games: games.length });
+  if (posted) log("sports_posted", { games: games.length }); // a failed post is logged by postKioskCard
   return { posted, text };
 }
 
